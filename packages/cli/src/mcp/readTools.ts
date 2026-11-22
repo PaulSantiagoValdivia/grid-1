@@ -199,8 +199,9 @@ const areasTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks how big the plan or a room is, for the total floor area, a gross internal or gross external area, square feet, circulation or net to gross, or an area table for a spreadsheet. '
-    + 'It lists every room with its inside size and net area, the totals by use, and the gross areas, each with the rule it is measured by stated in the answer. '
-    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Units are metres unless units is ft.',
+    + 'It lists every room with its inside size and net area, the totals by floor and by use, and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
+    + 'Pass country for the gross measure the reader there usually means (the inside face of the outer walls in the UK and most of Europe, the outside face for US homes), or gross to ask for one or both. '
+    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Units are metres unless units is ft.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -212,16 +213,22 @@ const areasTool: GridTool = {
       minItems: 1,
       maxItems: 50,
     },
+    country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code: the gross measure usual there is given first. Both when left out or when Grid has none for that place.', examples: ['GB', 'US'] },
+    gross: { type: 'string', enum: ['internal', 'external', 'both'], description: 'The gross measure to give: internal (to the inside face of the outer walls), external (to the outside face) or both. The usual one for country when left out.', examples: ['both', 'external'] },
     units: UNITS_ARG,
     format: FORMAT_ARG,
   },
   outputSchema: objectSchema({
-    floors: listSchema(objectSchema({ floor: STRING, net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, circulation: NUMBER, rooms: { type: 'array' }, byUse: { type: 'object' } }, ['floor', 'net', 'rooms'])),
+    floors: listSchema(objectSchema({ floor: STRING, net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, circulation: NUMBER, rooms: { type: 'array' }, leftOut: { type: 'array' }, byUse: { type: 'object' } }, ['floor', 'net', 'rooms', 'leftOut'])),
     net: NUMBER,
     grossInternal: NULLABLE_NUMBER,
     grossExternal: NULLABLE_NUMBER,
+    byUse: { type: 'object' },
     circulationShare: NULLABLE_NUMBER,
     netToGross: NULLABLE_NUMBER,
+    leftOut: { type: 'array' },
+    gross: objectSchema({ measures: listSchema(STRING), chosen: STRING, why: STRING }, ['measures', 'chosen', 'why']),
+    measures: listSchema(objectSchema({ measure: STRING, name: STRING, measures: STRING, notTakenOff: STRING, cannotSay: STRING })),
     rules: listSchema(STRING),
     notes: listSchema(STRING),
     // MSG-2: each total's state (proven, not-proven, not-looked-at) and the rooms it left out.
@@ -232,14 +239,27 @@ const areasTool: GridTool = {
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
     for (const id of outside) roomArg(survey.plan, id, 'outside_rooms item')
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
-    const areas = planAreas(survey, new Set(outside), floor === undefined ? undefined : [floor])
+    const country = args['country'] as string | undefined
+    if (country !== undefined && !/^[A-Za-z]{2}$/.test(country)) throw new ToolRefusal(`country takes a two-letter country code, such as GB or US: got ${q(country)}.`)
+    const asked = args['gross'] as 'internal' | 'external' | 'both' | undefined
+    const gross = asked === undefined ? undefined : asked === 'both' ? 'both' : asked === 'internal' ? 'grossInternal' : 'grossExternal'
+    const areas = planAreas(survey, {
+      outside: new Set(outside),
+      ...(floor === undefined ? {} : { floors: [floor] }),
+      ...(country === undefined ? {} : { country }),
+      ...(gross === undefined ? {} : { gross }),
+    })
     const data = {
       floors: areas.floors,
       net: areas.net,
       grossInternal: areas.grossInternal,
       grossExternal: areas.grossExternal,
+      byUse: areas.byUse,
       circulationShare: areas.circulationShare,
       netToGross: areas.netToGross,
+      leftOut: areas.leftOut,
+      gross: { measures: areas.reader.gross, chosen: areas.reader.chosen, why: areas.reader.why },
+      measures: areas.measures,
       rules: areas.rules,
       notes: areas.notes,
       states: areas.states,
@@ -263,14 +283,33 @@ const areasTool: GridTool = {
         lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}`)
       }
     }
-    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}.`)
-    if (areas.grossInternal !== null) {
-      lines.push(`Gross internal: ${areaText(areas.grossInternal, units)}${stateText(areas.states.grossInternal, several)}. Gross external: ${areaText(areas.grossExternal!, units)}${stateText(areas.states.grossExternal, several)}.`)
+    if (several) {
+      for (const f of areas.floors) {
+        const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${f[m] === null ? 'not known' : areaText(f[m]!, units)}`)
+        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}, ${gross.join(', ')}.`)
+      }
+    }
+    const uses = Object.entries(areas.byUse)
+    if (uses.length > 1) lines.push(`Net by use: ${uses.map(([use, area]) => `${use} ${areaText(area, units)}`).join(', ')}.`)
+    // Each figure with the rule it follows, in Grid's words: never a bare number (AR-16).
+    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}. ${AREA_RULES.net}`)
+    for (const m of areas.reader.gross) {
+      const value = m === 'grossInternal' ? areas.grossInternal : areas.grossExternal
+      const state = value === null ? '' : stateText(areas.states[m], several)
+      lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
+    }
+    lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
+    if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
     }
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)
     if (outsideArea > 0) lines.push(`Outside, listed apart: ${areaText(outsideArea, units)}.`)
-    lines.push(...areas.rules, ...areas.notes)
+    for (const rule of areas.measures) {
+      if (rule.measure === 'net' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+    }
+    // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
+    const measureRules: readonly string[] = Object.values(AREA_RULES)
+    lines.push(...areas.rules.filter((rule) => !measureRules.includes(rule)), ...areas.notes)
     return { text: lines.join('\n'), data }
   },
 }

@@ -181,3 +181,24 @@ describe('the parts Grid derives', () => {
     expect(after.rooms.map((r) => r.id)).toEqual(before.rooms.map((r) => r.id))
   })
 })
+
+describe('ids on several floors (MSG-6, lab AB-7)', () => {
+  const text = [
+    'walls outside 0.3 inside 0.1 height 2.7',
+    'floor ground "Ground floor" level 0',
+    'room hall "Hall" corridor 2 x 3 at 0,0',
+    'room bath "Bath" bathroom 2 x 3 east of hall',
+    'floor first "First floor" level 1',
+    'room study "Study" other 2 x 3 at 0,0',
+    'room bath "Bath" bathroom 2 x 3 east of study',
+  ].join('\n')
+
+  it('keeps an id written once as written, and names each one it had to change', () => {
+    const result = compileRoomsText(text)
+    expect(result.problems).toEqual([])
+    expect(result.plan!.rooms.map((r) => r.id)).toEqual(['hall', 'ground-bath', 'study', 'first-bath'])
+    expect(result.warnings.filter((w) => w.code === 'rooms/id-changed').map((w) => w.message)).toEqual([
+      "Ids are unique across the whole plan, and this one was written on more than one floor, so each takes its floor's id in front: 'bath' is 'ground-bath' on floor 'ground' and 'first-bath' on floor 'first'. Every other id is kept as written. Use these ids in later calls.",
+    ])
+  })
+})

@@ -13,6 +13,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
+- [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
 
 ## The commands
 
@@ -25,6 +26,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid draw [<plan>] [--png \| --3d] [--look <name>] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark` |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
+| `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
 | `grid serve` | Starts the tool server on standard input and output, with the 15 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
@@ -186,3 +188,15 @@ Grid draws only what the plan holds: no furniture, stairs or landscape. Every fi
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.
+
+## Who sits where: `grid occupancy`
+
+`grid occupancy [plan.json]` reads the occupancy file beside the plan, `plan.occupancy.json`
+beside `plan.json`, and prints each seat by its room's name, with its desk and the people at it.
+A seat whose room the plan no longer has, after a room was renamed in its id or taken out, is
+named by its place in the file (`seats[2]`), with the id it names. Without the file, the command
+is refused and says where the file goes.
+
+The file is kept apart from the plan so that people's names never travel with it: no export,
+sheet or tool of the tool server reads it, and the tool server has no tool for it. Its format is
+in [People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan).

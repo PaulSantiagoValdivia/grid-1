@@ -115,7 +115,9 @@ describe('nodes', () => {
 
   it('keeps hostile or colliding ids from breaking the file or the names', () => {
     const plan = samplePlan()
-    const ids = ['a b', 'a\nb', 'x"}{', '', 'a_b']
+    // Since MSG-6 a blank id, and ids alike but for spaces ('a b' and 'a\nb'), are refused and the
+    // part skipped, so these four are all distinct.
+    const ids = ['a b', 'a/b', 'x"}{', '#', 'a_b']
     plan.walls = plan.walls.map((wall, i) => ({ ...wall, id: ids[i] ?? wall.id }))
     plan.openings = []
     plan.rooms = []
