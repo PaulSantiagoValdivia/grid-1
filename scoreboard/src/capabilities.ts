@@ -150,7 +150,8 @@ export const CAPABILITIES = {
   parking: { what: 'holds parking spaces', probe: none },
   materials: { what: 'holds wall, roof and floor build-ups', probe: none },
   shading: { what: 'holds sun shading', probe: none },
-  'accessible-mark': { what: 'marks a room or fitting as accessible', probe: none },
+  // CNT-17: the rooms and routes that need to be accessible (C14). A fitting is not marked yet.
+  'accessible-mark': { what: 'marks a room or fitting as accessible', probe: schema('accessible', { rooms: ['r1'], routes: [{ to: 'r1' }] }) },
 } as const satisfies Record<string, Capability>
 
 export type CapabilityId = keyof typeof CAPABILITIES

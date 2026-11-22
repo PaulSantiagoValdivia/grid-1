@@ -535,7 +535,8 @@ describe('the built file', () => {
     // comparison's mirror test take it to 525,055 bytes, under the same cap, with no new dependency;
     // merged with LVL-8's facades and opening patterns and HND-1's DXF from main, 532,807 bytes,
     // still under it, so the cap stays.
-    // BRF-3's plot adds about 7,000 more.
-    expect(statSync(bundle).size).toBeLessThan(550_000)
+    // BRF-3's plot adds about 7,000 more. 600 kB since CNT-17: its accessibility measurements,
+    // merged with BRF-3 and WRT-4 from main, make it 555,889 bytes, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(600_000)
   })
 })
