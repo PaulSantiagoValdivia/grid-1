@@ -28,7 +28,7 @@ moved on the scoreboard, and the choices that were yours.
 - **COD-2's sentences stay where no type is stated.** Where a floor says it is a home, a note
   that used a figure ends "and the plan says this is a home" instead (`readForSentence`).
   `needed` on the figure findings is unchanged.
-- **27 room uses** (`ROOM_USES`): the nine, then `toilet`, `utility`, `study`, `office`,
+- **27 room uses** (`ROOM_USES`): the nine (ten with LVL-3's `lift`, merged from `main`), then `toilet`, `utility`, `study`, `office`,
   `meeting`, `reception`, `retail`, `classroom`, `treatment`, `waiting`, `sport`, `changing`,
   `staff`, `worship`, `assembly`, `lift`, `plant`, `parking`, with `other` last. None of the new
   ones is habitable: `HABITABLE_USES` and `RULE_USES` are unchanged.
@@ -163,3 +163,42 @@ apart from this branch: "the built file > starts with a shebang and is one file"
 from the S-11 plan > replaces room names by their uses and every id, and holds no path" (the
 answer it passes is cut at 4,000 characters before the path it looks for). Neither is touched
 here.
+
+### After merging `main` at 666bb01 (LVL-3, MSG-7, SHT-7, QAR-3, QAR-4, QAR-7)
+
+Merge commit 4b09fab. Nine files conflicted; both sides were kept in each:
+
+- `docs/commands.md`: CNT-5's "kind of building when the plan does not say it" with LVL-3's
+  stairs line.
+- `docs/result-contract.md`: every code row of both; CNT-5's changelog section on top, then
+  MSG-7's and SHT-7's. CNT-5's entry now says the uses join the ten (LVL-3 added `lift`).
+- `packages/cli/src/describe/card.ts`: main's `unsaid(facts, names)` with CNT-5's stated kind.
+- `packages/cli/src/describe/facts.ts`: both `building` (CNT-5) and `connections` (LVL-3) on
+  `PlanFacts`, and both built in `planFacts`.
+- `packages/floorplan/src/types/floorplan.ts`: CNT-5's 27 uses with LVL-3's comment on `lift`
+  (both sides had added `lift`); main's `stairs`, `title`, `annotations` and `sketch` beside
+  `building`, `tenure` and `roomType`.
+- `packages/floorplan/src/types/reading.ts`: both imports (`foldUseWord`, `withRunFromEnds`);
+  MSG-7's unused `fold` import dropped, since CNT-5's `nearestUse` folds with `foldUseWord`.
+- `packages/floorplan/src/types/__tests__/floorplan.test.ts`: the 27-use list.
+- `packages/rules/src/result/__tests__/result.test.ts`: the plan's fields with both sides' new
+  ones (`building`, `stairs`, `title`, `annotations`, `sketch`).
+- `packages/rules/src/result/catalogue.ts`: both imports (MSG-7's `PlanFix`, CNT-5's
+  `BUILDING_TYPE_TEXT`, `RULE_READ_FOR`, `BuildingKind`). MSG-7 added no field every entry must
+  have, so the four CNT-5 codes keep their `needed` and `fix`, which already say what would be
+  right.
+
+One change the merge needed beyond the conflicts: SHT-7's `USE_FILLS`
+(`packages/viewer/src/picture/look.ts`) is a fill for each use, so the 17 new uses got a pale fill
+each, near their group's colour. The sheet's `coverage.ts` merged cleanly with main's new parts
+(`stairs` drawn, `title` not shown, `annotations` and `sketch` drawn) and CNT-5's `building`.
+
+After the merge: `npm run build`, `npm run typecheck` and `npm run lint` clean. The affected
+tests (`packages/floorplan`, `packages/rules`, `packages/viewer`, `packages/cli/src/command`,
+`packages/cli/src/mcp`, `packages/cli/src/sheet`, `scoreboard/__tests__`) passed 4,248, with 3
+skipped (one in `sweep.test.ts` and two in `scoreboard/__tests__/doorSweeps.test.ts`, skipped on
+`main` too), in 206 of 206 files. The two tests that failed before the merge pass now: main
+raised the bundle budget to 500,000 bytes (the bundle is 476,143), and the report-problem path
+test passes. `npm run scoreboard`: "Same as the stored figures" (197, 386, 16, 2, 11; guards 735
+and 95).
+
