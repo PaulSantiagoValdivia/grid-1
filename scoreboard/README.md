@@ -36,8 +36,9 @@ Two areas "differ" when they are more than 0.01 m² apart.
    changed, an opening moved, a number set wrong, a word misspelt and so on. A plan counts
    here when Grid reads it, nothing throws, and Grid's results change (areas, issues, notes,
    storey heights or exports), but Grid prints nothing new. Nothing new means no new issue, no
-   new door warning, no new rules note and no new "not checked" line, both with and without a
-   country. The other outcomes are listed under "Damage" in the printout:
+   new door warning, no new rules note and no new "not checked" line, both with the US and with
+   Spain stated as the place (before COD-3, with no country and with Spain: a plan that states
+   no place now gets no figure, so the scoreboard states the US, whose figures it measured). The other outcomes are listed under "Damage" in the printout:
    - Grid names the damaged part;
    - Grid names something else;
    - the schema refuses the plan;
@@ -256,6 +257,12 @@ one turn that needs it (wide bifold doors and a roof lantern) also needs a roof,
 stays 16. The runner now passes each door's kind to the swing check and counts the doors listed as
 not checked among the "not checked" lines; damage that passes in silence stays 278, and sound
 plans with a warning 95 (no sound plan has a door of 1.5 m or more).
+
+CNT-14 merged with LVL-6 (sloped roofs) moved two counts past both. Turns answered, 18 to 19: the
+homeowner's sixth turn (wide bifold doors and a roof lantern) needs `door-leaves` and `roof`, and
+each branch had only one of them; together it is answered. Checks the plan can feed, 16 (LVL-6) to
+18: CNT-14's `openable-part` feeds checks 8 and 9 beside LVL-6's roof check. Every other count is
+both branches' figure.
 
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435

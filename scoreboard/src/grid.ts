@@ -43,7 +43,7 @@ export interface GridRun {
   readonly parseProblems: readonly string[]
   readonly issues: readonly Line[]
   readonly sweeps: readonly Line[]
-  /** Per country asked ("none" and "ES"): the note titles and the "not checked" lines. */
+  /** Per country asked ("US" and "ES", COD-3): the note titles and the "not checked" lines. */
   readonly reports: Readonly<Record<string, { readonly notes: readonly string[]; readonly details: readonly string[]; readonly notChecked: readonly string[]; readonly sha1: string }>>
   /** The ids of the things the rules report's findings are about (rooms and openings). */
   readonly findingIds: readonly string[]
@@ -158,10 +158,12 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
     const e = floorElevations(plan)
     return { floors: Object.fromEntries(e.floors), roof: e.roof }
   })
-  for (const country of [null, 'ES'] as const) {
-    const key = country ?? 'none'
+  // COD-3: with no place stated no figure applies, so the place is stated: the US, whose figures
+  // the scoreboard measures, and Spain, for which Grid carries none.
+  for (const country of ['US', 'ES'] as const) {
+    const key = country
     stage(`report-${key}`, () => {
-      const report = country === null ? checkLocalRules(plan) : checkLocalRules(plan, { country })
+      const report = checkLocalRules(plan, { country })
       const view = planNotes(plan, report)
       for (const finding of report.findings) run.findingIds.push(...finding.rooms, ...finding.openings)
       run.reports[key] = {

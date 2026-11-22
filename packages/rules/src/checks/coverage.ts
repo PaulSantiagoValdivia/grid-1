@@ -12,7 +12,7 @@
  * Pure: a plan in, plain data out.
  */
 
-import { indexPlan, planFloors, planForFloor, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
+import { indexPlan, planFloors, planForFloor, roomZones, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
@@ -29,6 +29,7 @@ export interface FloorScope {
 
 /** The order skips are listed in: what could not be looked at first, then what the check is not about. */
 const SKIP_ORDER: readonly SkipReason[] = [
+  'no_place',
   'not_for_building',
   'no_figures_for_place',
   'no_rooms',
@@ -40,7 +41,8 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'above_escape_storeys',
   'no_ground_level',
   'no_use',
-  'use_not_covered'
+  'use_not_covered',
+  'part_of_room'
 ]
 
 /** What each check looks at. A check Grid has must be here: a test fails when one is missing. */
@@ -62,6 +64,8 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
  */
 export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonly readFor: readonly BuildingKind[]; readonly is: BuildingType | undefined }): string {
   switch (reason) {
+    case 'no_place':
+      return 'no place is stated, so no figure was applied'
     case 'not_for_building':
       return `the figures were read for ${buildingKindsText(building?.readFor ?? [])}, and the plan says this is ${building?.is === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building.is]}`
     case 'no_figures_for_place':
@@ -90,6 +94,8 @@ export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonl
         : ruleId === 'stairs-line-up'
           ? 'only rooms used as a stair or a lift are lined up'
           : 'the figure is for bedrooms, living rooms and dining rooms only'
+    case 'part_of_room':
+      return 'a zone, looked at as part of its room, with its use'
   }
 }
 
@@ -149,9 +155,15 @@ export function planCheckScopes(
   for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
     const { storey, leftOut } = read.get(floor.id) ?? drawable(slice)
-    const outlines = roomOutlines(storey, indexPlan(storey), leftOut.rooms)
+    const index = indexPlan(storey)
+    const outlines = roomOutlines(storey, index, leftOut.rooms)
     const drawn = storey.rooms.filter((room) => outlines.has(room.id)).map((room) => room.id)
     const cannot = storey.rooms.filter((room) => !outlines.has(room.id)).map((room) => room.id)
+    // CNT-8: a zone is reached as its room is; the route checks look at the room.
+    const zoneOf = roomZones(index).zoneOf
+    const places = drawn.filter((id) => !zoneOf.has(id))
+    const zones = drawn.filter((id) => zoneOf.has(id))
+    const asPart = zones.length > 0 ? { part_of_room: zones } : {}
     const followed = drawn.length > 0 && !noStairs.has(floor.id)
 
     // The floor's way out: looked at when its routes ran and its door out is drawn.
@@ -160,16 +172,16 @@ export function planCheckScopes(
     add('floor-has-exit', floor.id, floorReason === null ? { lookedAt: [floor.id], skipped: {} } : { lookedAt: [], skipped: { [floorReason]: [floor.id] } })
 
     // A door on every room: on every floor, but not the one room of a floor the plan cannot reach.
-    const alone = !followed && drawn.length === 1
+    const alone = !followed && places.length === 1
     add('room-has-door', floor.id, {
-      lookedAt: alone ? [] : drawn,
-      skipped: { cannot_be_drawn: cannot, ...(alone ? { alone_off_ground: drawn } : {}) }
+      lookedAt: alone ? [] : places,
+      skipped: { cannot_be_drawn: cannot, ...(alone ? { alone_off_ground: places } : {}), ...asPart }
     })
 
     // A route to the way out: only on a floor whose routes ran.
     add('room-reaches-exit', floor.id, {
-      lookedAt: followed ? drawn : [],
-      skipped: { cannot_be_drawn: cannot, ...(followed ? {} : { no_stairs: drawn }) }
+      lookedAt: followed ? places : [],
+      skipped: { cannot_be_drawn: cannot, ...(followed ? {} : { no_stairs: places }), ...asPart }
     })
 
     // Stairs and lift shafts line up (LVL-3): the rooms used as a stair or a lift, on every floor.
@@ -259,9 +271,11 @@ export function roomsLookedAt(
   const seen = new Set(
     coverage.filter((check) => check.looksAt === 'room').flatMap((check) => check.lookedAt.flatMap((group) => group.ids.map((id) => key(group.floor, id))))
   )
+  // CNT-8: a zone is looked at when its room is.
+  const zoneOf = roomZones(indexPlan(plan)).zoneOf
   const rooms = planFloors(plan)
     .filter((f) => floor === undefined || f.id === floor)
     .flatMap((f) => planForFloor(plan, f.id).rooms.map((room) => ({ floor: f.id, id: room.id })))
-  const byNone = rooms.filter((room) => !seen.has(key(room.floor, room.id)))
+  const byNone = rooms.filter((room) => !seen.has(key(room.floor, room.id)) && !seen.has(key(room.floor, zoneOf.get(room.id) ?? '')))
   return { rooms: rooms.length, lookedAt: rooms.length - byNone.length, byNone }
 }

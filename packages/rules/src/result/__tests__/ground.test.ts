@@ -45,7 +45,7 @@ describe('openings below the ground in the result record (LVL-4)', () => {
 })
 
 describe('the floor at grade (LVL-4)', () => {
-  /** The flat's bedroom with its use stated and one window too small to escape through, on a floor at level 1. */
+  /** The flat's bedroom with its use stated and one window too small to escape through, on a floor at level 1, in the US. */
   const upstairs = (ground?: number): FloorPlan => {
     const plan = flat()
     return {
@@ -53,7 +53,8 @@ describe('the floor at grade (LVL-4)', () => {
       floors: [{ id: 'ground', name: 'Ground floor', level: 1, elevation: 0 }],
       rooms: plan.rooms.map((r) => (r.id === 'bedroom' ? { ...r, use: 'bedroom' as const } : r)),
       openings: [...plan.openings, { id: 'w_bed', wall: 'n2', type: 'window' as const, offset: 1, width: 0.6, sill: 0.6, height: 0.7 }],
-      ...(ground === undefined ? {} : { site: { ground } })
+      // COD-3: the plan states the US, so the escape figures apply.
+      site: { country: 'US', ...(ground === undefined ? {} : { ground }) }
     }
   }
   const figure = (plan: FloorPlan): string[] =>

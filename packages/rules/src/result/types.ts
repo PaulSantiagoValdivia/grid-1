@@ -9,6 +9,7 @@
 
 import type { PlanFix } from '@ongrid/floorplan/geometry'
 import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
+import type { PlaceUsed } from '../checks/place'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
 export const RESULT_VERSION = 1 as const
@@ -150,4 +151,12 @@ export interface GridResult {
   readonly figures: readonly AppliedFigure[]
   /** What these checks never look at, whatever the plan: the same lines every time. */
   readonly limits: readonly string[]
+  /**
+   * COD-3: the place the figure checks were for, from Grid's list (`country`, the two-letter
+   * code; `name`, Grid's name; `from`: `request`, `plan` or `assumed`). Null when no place is
+   * stated, and then no figure was applied; null too when the plan was refused.
+   */
+  readonly place: PlaceUsed | null
+  /** COD-3: only when the plan was read and states no place: how many lines the US figures would have given. */
+  readonly withoutPlace?: { readonly usLines: number }
 }

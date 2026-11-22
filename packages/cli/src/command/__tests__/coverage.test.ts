@@ -205,11 +205,12 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     expect(size.lookedAt.flatMap((g) => g.ids)).toEqual(['seating'])
     expect(size.findings).toBe(0)
     expect(size.readFor).toEqual(['homes'])
-    // MSG-10: the short report says it once, for the one check that used figures.
+    // MSG-10: the short report says it once; COD-3: in the place line, right after the label.
     const short = checkText(result, 1)
     // CNT-5 reads the servery's "servery" as `retail`, a use the check is not about, so the short report names no gap.
     expect(short).toContain('  - Rooms people live or sleep in have a minimum floor area: 1 room.\n')
-    expect(short).toContain(`\nThe check that uses figures read them for ${HOMES}.\n`)
+    expect(short.split('\n')[1]).toBe('Place: United States, from --country; figures from US model codes, read for homes.')
+    expect(short).not.toContain('read them for')
     const text = checkText(result, 1, { full: true })
     expect(text).toContain(`  - Rooms people live or sleep in have a minimum floor area: looked at 1 room; 0 findings; its figures were read for ${HOMES}.`)
     // MSG-3: given as the figure used here, with its basis, the kind of building, and its status.

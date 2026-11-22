@@ -28,6 +28,7 @@ import {
 } from '@ongrid/floorplan/geometry'
 import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type TextMark, type TextRead } from '@ongrid/floorplan/types/jsonText'
+import { countryInText } from '@ongrid/floorplan/types/places'
 import { readPlanParts, type LeftOutPart, type PartRef, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
@@ -661,7 +662,9 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     checks: report?.rules ?? [],
     coverage: report?.coverage ?? [],
     figures: report?.figures ?? [],
-    limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS]
+    limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS],
+    place: report?.place ?? null,
+    ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {})
   }
 }
 
@@ -716,7 +719,8 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     // MSG-5: with what the reader left out, so a note that rests on it is held back.
     report = checkLocalRules(plan, { ...options, leftOut: read.leftOut })
     const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
-    const country = (options.country ?? '').trim().toUpperCase()
+    // COD-3: the place by Grid's name for it, never the text it was given.
+    const country = report.place === null ? '' : countryInText(report.place.country)
     lines.push(...groupedFindings(report.findings, names, wayOutNotDrawn))
     lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country, wayOutNotDrawn)))
   })

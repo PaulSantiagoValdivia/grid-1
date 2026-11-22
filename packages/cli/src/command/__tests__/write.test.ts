@@ -151,4 +151,27 @@ describe('grid write', () => {
     expect((await grid(dir, 'write', 'plan.rooms', '--floor', 'x')).status).toBe(2)
     expect((await grid(dir, 'describe', '--as', 'rooms', '--for', 'agent')).err).toContain('--as rooms reads the plan back as rooms text, which has no --for')
   })
+
+  it('reminds the first write over the starter plan that no brief is kept, in one line, and writes it (BRF-1)', async () => {
+    const dir = await project()
+    const first = await grid(dir, 'write', 'plan.rooms')
+    expect(first.status).toBe(0)
+    expect(first.err).toBe('')
+    expect(first.out.split('\n').filter((line) => line.startsWith('No brief is kept beside this plan ("plan.brief.json")'))).toHaveLength(1)
+    expect(planOf(dir).written).toMatchObject({ from: 'rooms' })
+    const again = await grid(dir, 'write', 'plan.rooms')
+    expect(again.out).not.toContain('No brief is kept')
+  })
+
+  it('says each line of the brief beside the plan after the write, and after an edit (BRF-1)', async () => {
+    const dir = await project()
+    writeFileSync(join(dir, 'plan.brief.json'), JSON.stringify({ version: '1', rooms: [{ name: 'Bathroom', area: 4.5, level: 'must', source: 'given', quote: 'a bathroom of 4.5' }] }))
+    const ran = await grid(dir, 'write', 'plan.rooms')
+    expect(ran.status).toBe(0)
+    expect(ran.out).not.toContain('No brief is kept')
+    expect(ran.out).toMatch(/(met|missed) \(must\): "Bathroom" area asked 4\.5, drawn \d+\.\d\d m²\./)
+    const edit = await grid(dir, 'edit', 'rename', '--room', 'bed1', '--name', 'Main bedroom')
+    expect(edit.status).toBe(0)
+    expect(edit.out).toMatch(/"Bathroom" area asked 4\.5, drawn \d+\.\d\d m²\./)
+  })
 })

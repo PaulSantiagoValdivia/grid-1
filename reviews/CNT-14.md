@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C10), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C12), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -255,6 +255,11 @@ Smaller tests: the escape check on a window's part and a fixed window
     (write `opens` in the file, or rooms text's `part`); marks (WRT-6) cannot be put on `kind` or
     `opens`; problem report drafts (CMD-13) keep no opening kind; `useOpenLeaf` (CNT-13) still
     takes a leaf's allowance from every door, sliding or not.
+13. **After merging `main` c05d051.** LVL-6's rooflights stay one pane 0.05 m thick in the IFC
+    (`ROOFLIGHT_DEPTH`, main's old `LEAF_DEPTH`, kept for them alone): a rooflight is not an
+    opening and takes no kind, so it gets no frame, sash or glass style. Giving rooflights CNT-14's
+    parts would be a small follow-up. CNT-14's plan-format convention is now C12, since COD-3 and
+    VEW-3 took C10 and C11 on `main`.
 
 ## Checks run
 
@@ -275,3 +280,64 @@ On top of `main` ca2db98, on this branch:
   and `fileOrder.test.ts`, which did not yet hold the door and window parts); after updating them
   (and ordering the scene's openings by the plan), the second run: 280 of 280 files passed, 5,159
   tests passed, 4 skipped (5,163), in 1,122 s.
+
+### Again after merging `main` c05d051
+
+`main` brought, since ca2db98: zones inside one room (CNT-8), the place stored with the plan
+(COD-3), comparing two versions by what stands where (WRT-8), the brief (BRF-1), sloped ceilings
+and roofs (LVL-6), which rooms get the sun (BRF-5) and a camera saved as a named view (VEW-3).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: every Unreleased entry of both sides, CNT-14's first.
+- `docs/result-contract.md`: both sides' rows (none clashed: CNT-14's
+  `floor/not-checked-door-swings` beside COD-3's reworded place rows) and every agents' changelog
+  entry, CNT-14's at the top. CNT-14's entry gains one line for `grid_diff` (below).
+- `packages/floorplan/src/types/floorplan.ts`: both header conventions. COD-3 and VEW-3 took C10 and
+  C11, so CNT-14's is now C12 (also in its two comments, `openingKinds.ts` and point 1 above). The
+  opening's `kind` and `opens` sit beside main's fields; no top-level part changed, and
+  `sheet/coverage.ts` (main's, with `views`) still type-checks.
+- `validate.ts`, `edits.ts`, `readTools.ts`, `escape.ts`: import lists, the union of both.
+- `scene3d.ts`: CNT-14's `SceneOpening` and `sceneOpening` beside LVL-6's `roofSolidOf`; in
+  `buildScene` the scene's height is LVL-6's (the elevation's, under the roof) and each wall still
+  adds its doors' and windows' parts.
+- `export/ifc.ts`: `bodyRepresentation` takes one solid or CNT-14's list of parts, and LVL-6's
+  representation type (`SweptSolid` or `Clipping`). CNT-14's `boxSolid` and `glazed` beside
+  LVL-6's `clipped` and `above`. LVL-6's rooflight pane used `LEAF_DEPTH`, which CNT-14 had
+  removed: it is `ROOFLIGHT_DEPTH` (0.05 m, the same figure), so rooflights are written as on
+  `main` (For the owner 13).
+- `scoreboard/current.json`: not hand-merged; written by the scoreboard (below).
+
+**Where the two features meet.** Main's new opening code was read for CNT-14's kinds. LVL-6's
+`opening/above-roof` measures heights only and needs no kind. BRF-1's `door_width` measures the
+hole, as before. No new code on `main` sweeps a door, so no sweep needed teaching. WRT-8's building
+comparison (`geometry/diff/building.ts`) named width, height, sill, hinge and swing but not the
+kind: it now names a change of kind and of the part that opens, in the words CNT-14's plan
+comparison (`quantities/compare.ts`) uses, with a test in `diff-building.test.ts` ("a door of
+another kind"), under new ids too.
+
+**Goldens.** Both sides changed the IFC exporter, so the four goldens were written again with
+`-u`: byte for byte CNT-14's. Entity by entity against `main` (references and GlobalIds blanked)
+the only changes are CNT-14's: each filler's one-box shape and the two styles' old description
+went; the frame, leaf and glass solids with their profiles and placements, one glass style per
+storey and the styles' new description came. No golden holds a roof, so LVL-6 moved none.
+
+**Expectations changed.** None.
+
+**Scoreboard** (`npm run scoreboard -- --write-current`, then `npm run scoreboard`): 197, 278,
+**19**, 5, **18**, 735, 95. Turns answered 19 is above both sides (16 here, 18 on `main`): the
+homeowner's sixth turn, "wide bifold doors and a roof lantern", needs `door-leaves` (CNT-14) and
+`roof` (LVL-6). Checks fed 18 is LVL-6's 16 with CNT-14's two (`openable-part`). The reason is in
+`scoreboard/README.md`.
+
+**Checks run**
+
+- While merging, only the touched tests, two workers: the floorplan export tests with the roof,
+  zone, diff and kind tests (15 files, 456 tests passed), then `packages/rules`, the edits, the
+  versions and the floorplan core (126 files, 3,082 passed, 1 skipped). No failure.
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass (the first type check failed on LVL-6's
+  `LEAF_DEPTH`, fixed as above).
+- `npm run scoreboard -- --write-current`, then `npm run scoreboard`: 197, 278, 19, 5, 18, 735, 95.
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
+  packages/rules packages/cli packages/viewer scoreboard/__tests__`: 292 of 292 files passed,
+  5,244 tests passed, 4 skipped (5,248), in 706 s.

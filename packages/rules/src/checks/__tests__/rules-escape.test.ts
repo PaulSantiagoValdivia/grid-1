@@ -12,7 +12,7 @@ import { inspectPlan } from '../../result'
  * (`b-w0`, running +X, so the room is on its left side). With `interiorBottom` a hall is drawn
  * on the other side of that wall: since MSG-13 an inside wall is one with rooms on both sides,
  * worked out from the outlines, and a wall that only says `interior` with nothing behind it
- * faces outside.
+ * faces outside. The plan states its place, the US (COD-3).
  */
 function bedroom(
   openings: Omit<Opening, 'wall'>[],
@@ -44,9 +44,11 @@ function bedroom(
       }))
     : []
   const hall = { id: 'h', name: 'Hall', boundary: ['h-w0', 'h-w1', 'b-w0', 'h-w3'], floor: 'f', use: 'corridor' } as Room
+  // COD-3: the plan states its place, so the US figures apply.
   return {
     version: '1',
     units: 'm',
+    site: { country: 'US' },
     floors: [{ id: 'f', name: 'Floor', level }],
     walls: [...walls, ...hallWalls],
     rooms: interiorBottom ? [room, hall] : [room],
@@ -216,7 +218,7 @@ describe('figures looked up for another country', () => {
     const report = checkLocalRules(bedroom([]), { country: 'ES' })
     expect(report.findings.filter((f) => ESCAPE.includes(f.code))).toEqual([])
     expect(report.notChecked.map((n) => n.message)).toContain(
-      'Escape openings were not checked: the figures here are from US model codes, and this plan is for ES'
+      'Escape openings were not checked: the figures here are from US model codes, and this plan is for Spain'
     )
   })
 })
@@ -305,19 +307,16 @@ describe('order in the report', () => {
   })
 })
 
-/**
- * Known failures from the lab (entry Z-4), as expected failures. Each states the right
- * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
- * `it`. Each title starts with its lab entry ID.
- */
-describe('known failures (expected to fail until fixed)', () => {
-  // Lab CH-3: "USA" is read as another country, so the US escape rule is skipped in silence.
+describe('the place, read through Grid\'s list (COD-3, lab CH-3)', () => {
+  // Lab CH-3: "USA" was read as another country, so the US escape rule was skipped in silence.
   // rules-figures.test.ts 'is false for any other country' lists ES, GB, DE, IT and Spain,
-  // never USA, so a fix need not change it.
-  it.fails('CH-3 "USA" is read as the same place as "US", or refused', () => {
+  // never USA, and still holds.
+  it('CH-3 "USA" is read as the same place as "US", or refused', () => {
     const plan = bedroom([])
     const codes = (country: string) => checkLocalRules(plan, { country }).findings.map((f) => f.code)
-    expect(codes('USA')).toEqual(codes('US'))
+    expect(codes('US')).toContain('no_escape_opening')
+    for (const country of ['USA', 'United States', ' united states ', 'u.s.a.', 'United States of America']) expect(codes(country), country).toEqual(codes('US'))
+    expect(() => codes('the moon')).toThrow(/^country names no place Grid knows/)
   })
 })
 

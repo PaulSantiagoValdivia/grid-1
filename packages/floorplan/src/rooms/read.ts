@@ -186,7 +186,8 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
   if (a.length !== b.length) return true
   return a.some((f, i) => {
     const g = b[i]!
-    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building
+    // LVL-4's parapet and LVL-6's roof are not rooms text: a floor that states one is given in Grid's own terms.
+    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building || !sameNumber(f.parapet, g.parapet) || JSON.stringify(f.roof) !== JSON.stringify(g.roof)
   })
 }
 
@@ -516,6 +517,11 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
     lines.push('')
     const fl = floorLine(plan, d.id)
     if (fl !== null) lines.push(fl)
+    // LVL-6: the floor's roof and parapet, which rooms text has no words for, as the plan holds them.
+    const f = (plan.floors ?? []).find((x) => x.id === d.id)
+    if (f !== undefined && (f.roof !== undefined || f.parapet !== undefined)) {
+      lines.push(`raw floor ${JSON.stringify({ ...(f.roof !== undefined ? { roof: f.roof } : {}), ...(f.parapet !== undefined ? { parapet: f.parapet } : {}) })}`)
+    }
     if (raw.has(d.id)) {
       lines.push(`# Written in Grid's own terms: rooms text does not give back this floor's walls as they are.`)
       for (const w of plan.walls.filter((x) => floorOf(x) === d.id)) lines.push(rawLine('wall', w))

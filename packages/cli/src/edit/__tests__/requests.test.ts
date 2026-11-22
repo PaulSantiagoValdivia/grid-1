@@ -89,10 +89,12 @@ describe("E's six requests, one call each", () => {
   })
 
   it('2. knock the kitchen and living room into one: the same plan as by hand', async () => {
-    const reply = await b.call('grid_merge_rooms', { plan: 'v01.json', room: 'living', with: 'kitchen', name: 'Kitchen and living', out: 'r2.json' })
+    // CNT-8 (lab AB-9): two uses are never made one in silence. E kept the living room's by hand.
+    const reply = await b.call('grid_merge_rooms', { plan: 'v01.json', room: 'living', with: 'kitchen', name: 'Kitchen and living', use: 'living', out: 'r2.json' })
     expect(reply.isError, reply.text).toBe(false)
     expect(differences(written('r2.json'), byHand('02'))).toEqual([])
     expect(reply.text).toMatch(/Removed opening "pass-kitchen-living": it was in the wall taken out\./)
+    expect(reply.text).toMatch(/The plan now has no room or zone used as kitchen, which the plan before had\./)
   })
 
   it('3. the bathroom door to the other wall: the same plan as by hand', async () => {
