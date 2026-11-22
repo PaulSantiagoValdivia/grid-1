@@ -108,6 +108,8 @@ export interface GridTool {
 /** What a tool may reach: the project folder, or the reason there is none. */
 export interface ToolContext {
   readonly project: Project | PathRefused
+  /** The protocol version the request named, when it named one (a 2026-07-28 client, CMD-13). */
+  readonly protocolVersion?: string
 }
 
 const HINTS: Record<Hint, Record<string, boolean>> = {

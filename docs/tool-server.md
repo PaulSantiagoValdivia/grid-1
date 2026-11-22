@@ -6,13 +6,14 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 - [The tools](#the-tools)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
+- [Reporting a problem](#reporting-a-problem)
 - [Protocol versions](#protocol-versions)
 
 ## The tools
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, then the preview, the export and the sheet, and last the nine that
+requests people make most, with the problem report last of them, then the preview, the export and the sheet, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Units are metres.
@@ -22,13 +23,14 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
-| `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
+| `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); text or CSV |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
+| `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
-| `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
+| `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
@@ -55,6 +57,12 @@ Room names and ids go into every export and sheet, and travel with the plan file
 person's name in a room's name or id. Who sits where belongs in the occupancy file beside the
 plan, which no export, sheet or tool reads ([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
 `grid_write_rooms`, `grid_export`, `grid_sheet` and the server's instructions say so.
+
+`grid_export` answers with what its file leaves out (HND-6): `leftOut`, how many parts, and
+`leftOutParts`, each part with its `kind`, `id`, `place` (for a part left out when the plan was
+read), `floor` and `code` (the line of `grid_check` that leaves it out). The file carries the
+same note ([What an export leaves out](commands.md#what-an-export-leaves-out-hnd-6)). An export
+that would hold no wall, room or fixture is refused, and nothing is written.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
@@ -87,6 +95,40 @@ A room may state its height, floor to ceiling, in metres:
 
 A wall that states no height gets 2.7 m, which cannot be told from a stated 2.7 m. The plan
 comparison in `@ongrid/floorplan` (`diffPlans`) reports a room height stated, changed or taken out.
+
+## Reporting a problem
+
+`grid_report_problem` turns a failure an agent met into a draft issue, and sends nothing. It
+reads the plan, writes nothing, and is marked read-only. The agent passes the tool it called,
+the call's arguments and answer, what it expected, and the code of the result record's line the
+problem is about (or the ids of the parts, `parts`), and may pass its client's name. The draft
+holds:
+
+- Grid's version, the result record's version, and the protocol version when the request names
+  it (a 2026-07-28 client does; after `initialize` the server keeps nothing, so it says so);
+- the call, its answer (the first 4,000 characters) and what the agent expected;
+- the record's line for that code: its message, what was found and needed, and the fix; for a
+  plan the command refuses, the refusal and the record that says so;
+- the smallest plan that shows it: the parts the line names, in `also` or quoted in its words,
+  and the parts named, with what they touch. A room brings its walls, a door or window its wall,
+  and a wall named itself the walls that cross or meet it and its openings. With nothing named,
+  the whole plan.
+
+The plan and every text of the draft are cleared before they are shown. Room names are replaced
+by their uses (`bedroom`, `bedroom 2`, or `room`), every id by its kind and a number
+(`wall-3`, `door-2`), a floor's name by `floor 1`. A fixture's label, the trace image, the
+project id, the record of how the plan was written and any field Grid does not know are left
+out; only numbers and Grid's own words are kept. Paths, file names, web addresses and email
+addresses in the arguments, the answer and what was expected become `<path>`, `<file>`,
+`<address>` and `<email>`. What is left follows the plan's text rule. Room names and ids go into
+every export, which is why they are never filed as they are
+([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
+
+The answer holds the draft (`title`, `body`, `labels`) and `link`, the repository's issue form
+with the title, the `agent-drafted` label and, when the link stays under about 8 KB, the body
+filled in (`linkHasBody`). The form is `.github/ISSUE_TEMPLATE/agent-drafted.md`. The agent
+shows the person the draft exactly as returned; the person opens the link and files it, or not.
+An agent never files, posts or sends it.
 
 ## Protocol versions
 

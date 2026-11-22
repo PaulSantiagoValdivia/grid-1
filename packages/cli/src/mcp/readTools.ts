@@ -8,8 +8,8 @@
  * output schema. Names and ids that come from the plan file are quoted.
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
-import { GENERAL_GUIDANCE_LABEL, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, partsText, thingText } from '../command/check'
+import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
+import { checkPlan, countsText, KIND_WORDS, partsText, thingText, usedFigures } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
@@ -36,7 +36,7 @@ import {
   type RoomHeight,
   type Thing,
 } from '../quantities/measure'
-import { planSchedule } from '../quantities/schedule'
+import { openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
@@ -58,6 +58,7 @@ import {
   thingArg,
   ToolRefusal,
   wallArg,
+  type Answer,
   type ArgSpec,
   type GridTool,
   type ToolContext,
@@ -367,6 +368,28 @@ const takeoffTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_schedule
 
+/** ARE-12: the room schedule or the opening schedule, from one set of rows, as text or CSV. */
+function listSchedule(survey: Survey, of: 'rooms' | 'openings', floor: string | undefined, units: DisplayUnits, asCsv: boolean): Answer {
+  const floors = floor === undefined ? undefined : [floor]
+  const several = survey.facts.floors.length > 1
+  if (of === 'rooms') {
+    const s = roomSchedule(survey, floors === undefined ? {} : { floors })
+    const data = { rows: s.rows, floors: s.floors, total: s.total, rules: s.rules }
+    if (asCsv) return { text: roomScheduleCsv(s), data }
+    const lines = s.rows.map((r) => `${r.number}. ${q(r.name)}${r.use ? ` (${r.use})` : ''}, ${q(r.floorName)}: ${r.area === null ? 'not measured: it could not be drawn' : areaText(r.area, units)}, ${r.height === null ? 'height not known' : `${lengthText(r.height, units)} high`}${r.state === 'not-proven' ? ', not proven' : ''}`)
+    for (const t of s.floors) lines.push(`${q(t.floorName!)}: ${t.rooms} rooms, ${areaText(t.area, units)}${stateText(t.state, several)}.`)
+    lines.push(`All floors: ${s.total.rooms} rooms, ${areaText(s.total.area, units)}${stateText(s.total.state, several)}.`, ...s.rules)
+    return { text: lines.join('\n'), data }
+  }
+  const s = openingSchedule(survey, floors === undefined ? {} : { floors })
+  const data = { rows: s.rows, counts: s.counts, rule: s.rule }
+  if (asCsv) return { text: openingScheduleCsv(s), data }
+  const lines = s.rows.map((r) => `${r.number}. ${r.type} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units)}` : ''}, ${r.between[0]} ↔ ${r.between[1]}`)
+  if (lines.length === 0) lines.push('The plan has no openings.')
+  lines.push(`In all, each counted once: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
+  return { text: lines.join('\n'), data }
+}
+
 const scheduleTool: GridTool = {
   name: 'grid_schedule',
   title: 'Door and window schedule',
@@ -374,10 +397,12 @@ const scheduleTool: GridTool = {
   description:
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, or how many toilets, basins, showers, baths or kitchen runs there are and where. '
     + 'It groups every door, window and doorless opening by type and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame or leaf, so a clear width is not known. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height and floor, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size and the rooms on its two sides. Both as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Units are metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
+    of: { type: 'string', enum: ['rooms', 'openings'], description: 'rooms for the room schedule, openings for one row per door, window and opening. Grouped by type and size when left out.', examples: ['rooms', 'openings'] },
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
@@ -389,10 +414,20 @@ const scheduleTool: GridTool = {
     rule: STRING,
     fixtures: listSchema(objectSchema({ id: STRING, kind: STRING, label: STRING, floor: STRING, room: { type: ['string', 'null'] }, size: { type: 'array' }, height: NUMBER })),
     fixtureCounts: { type: 'object' },
-  }, ['rows', 'counts', 'rule']),
+    // ARE-12, with of=rooms or of=openings: the schedule's rows, and for rooms each floor's total and all floors'.
+    floors: { type: 'array' },
+    total: { type: 'object' },
+    rules: listSchema(STRING),
+  }, ['rows']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const of = args['of'] as 'rooms' | 'openings' | undefined
+    if (of !== undefined) {
+      const stray = ['types', 'narrower_than'].filter((name) => args[name] !== undefined)
+      if (stray.length > 0) throw new ToolRefusal(`of=${of} takes no ${stray.join(' or ')}.`)
+      return listSchedule(survey, of, floor, units, args['format'] === 'csv')
+    }
     const types = args['types'] as ('door' | 'window' | 'opening' | 'fixture')[] | undefined
     const openingTypes = types?.filter((t): t is 'door' | 'window' | 'opening' => t !== 'fixture')
     const s = planSchedule(survey, {
@@ -884,7 +919,8 @@ const checkTool: GridTool = {
     const record = result.result
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
     lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}. Checks run: ${result.report.rules.length}.`)
-    record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Fix: ${line.fix} [${line.code}]`))
+    // COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for.
+    record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`))
     if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
     // MSG-7: each line one call would clear carries that call, ready to send.
     const withCalls = record.lines.map((line) => withFixCalls(line, args['plan']))
@@ -896,7 +932,8 @@ const checkTool: GridTool = {
     lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
     for (const check of record.coverage) {
       const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-      lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
+      const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
+      lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
     }
     // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
     lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
