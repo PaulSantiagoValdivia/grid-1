@@ -7,7 +7,7 @@
  * what it takes. It never repeats the value it was sent: that is text from the agent, and may
  * be anything (MS-19, T-3).
  */
-import { planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { GENERAL_GUIDANCE_LABEL, planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { LengthRefused, readLength } from '@ongrid/floorplan/types/units'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
@@ -159,6 +159,30 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
   return rest
 }
 
+/**
+ * MSG-3: every answer leads with the label "General guidance, not your local rules" and carries
+ * it as `label` in its data. Done here, once, so no tool can leave it out. A refusal is not an
+ * answer about the plan and is left as it is.
+ */
+export function labelled(answer: Answer): Answer {
+  // A first line that holds it already (a CSV cell, a comment in rooms text) is left as it is.
+  const first = answer.text.split('\n', 1)[0]!
+  const text = first.includes(GENERAL_GUIDANCE_LABEL) ? answer.text : `${GENERAL_GUIDANCE_LABEL}\n${answer.text}`
+  return { ...answer, text, data: { label: GENERAL_GUIDANCE_LABEL, ...answer.data } }
+}
+
+/** The output schema with the label every answer carries (MSG-3). */
+function labelledSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema['properties'] as Record<string, unknown> | undefined
+  if (properties === undefined) return schema
+  const required = (schema['required'] as readonly string[] | undefined) ?? []
+  return {
+    ...schema,
+    properties: { label: { type: 'string', const: GENERAL_GUIDANCE_LABEL }, ...properties },
+    required: required.includes('label') ? [...required] : ['label', ...required],
+  }
+}
+
 /** The tool as `tools/list` shows it. */
 export function toolDefinition(tool: GridTool): Record<string, unknown> & { name: string } {
   const required = Object.entries(tool.args).filter(([, spec]) => spec.required).map(([name]) => name)
@@ -172,7 +196,7 @@ export function toolDefinition(tool: GridTool): Record<string, unknown> & { name
       ...(required.length > 0 ? { required } : {}),
       additionalProperties: false,
     },
-    outputSchema: tool.outputSchema,
+    outputSchema: labelledSchema(tool.outputSchema),
     annotations: { title: tool.title, ...HINTS[tool.hint] },
   }
 }

@@ -237,6 +237,17 @@ counted that the lab did not mark "answered fully": the lab's harness had no gro
 estate agent's and the developer's area turns still need feet and inches, and flats. Checks the
 plan can feed stays 5: the two checks that need gross areas also need the plot (`site`).
 
+MSG-16 (where each opening stands, against the walls that meet its wall) moved two counts.
+Damage that passes in silence, 386 to 278: 108 damaged plans are now named, all from "move an
+opening". The opening pushed to the very start or flush to the end of its wall runs into the wall
+that meets it there (`opening/crosses-wall`), and an opening moved onto a junction is named with
+the wall that ends in it (`wall/ends-in-opening`); every one of the 141 openings pushed to an end
+is named (`scoreboard/__tests__/openingPlaces.test.ts`). Design mistakes named, 2 to 5: mistake 2
+(a window crossed by a new partition), 4 (a door straddling an end wall) and 9 (openings cut by
+moved partitions). Sound plans with a warning stays 95: the generator keeps every opening 0.35 m
+clear of the junctions, further than any wall's half thickness, and puts windows only in outside
+walls.
+
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the
@@ -251,6 +262,27 @@ silent, 117 no effect, 506 refused. The printout's `plansWhoseOutcomeDiffersNow`
 have moved since. Of the 560 silent plans, the lab judged about 223 to be edits that are not
 mistakes (lab entry W-3): a wall list reordered or reversed, an opening moved along its own
 wall, a room or opening deleted. They stay in the count as the lab defined it.
+
+## The retelling set
+
+MSG-3. An agent that retells a Grid report must keep its label first, never say a plan passes,
+complies, is approved or meets code, and give each figure with its basis and status.
+`retell/cases.json` holds twelve questions a person asks about a real report (eight lab plans,
+three fixtures, one of them for Germany); each prompt gives the model the tool server's
+instructions and what `grid check` prints for that plan. `src/retell.ts` builds the prompts and
+scores an answer on the three points; `retell/samples.json` holds retellings written by hand,
+each with the score it must get, and `__tests__/retell.test.ts` holds the scorer to them,
+offline.
+
+Sending the prompts to a model costs money, so it is not part of the tests or CI:
+
+```bash
+npm run retell -- --prompts out/prompts          # write the prompts, send nothing
+npm run retell -- --from out/answers             # score answers saved as <id>.txt
+npm run retell -- --model <model id> --out r.json   # send them, with ANTHROPIC_API_KEY set
+```
+
+It prints one line a case and how many held every point, and exits 1 when one did not.
 
 ## The data
 

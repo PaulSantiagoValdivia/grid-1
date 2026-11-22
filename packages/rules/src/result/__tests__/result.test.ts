@@ -287,9 +287,9 @@ describe('every line', () => {
     expect(lines[0]).toMatchObject({
       thing: { kind: 'opening', id: 'd_bb' },
       also: ['bathroom', 'bedroom'],
-      message: 'An opening from "Bathroom" is too small for a person to pass through, so it is not a way through',
+      message: 'An opening from "Bathroom" is too small for a person to get through, so it is not a way through',
       found: 'the door is 0.30 m wide',
-      needed: "at least 0.40 m wide: Grid's own size for a person to pass, not a code figure"
+      needed: "at least 0.40 m wide: Grid's own size for a person to get through, not a code figure"
     })
   })
 })

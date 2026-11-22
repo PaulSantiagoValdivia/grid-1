@@ -6,6 +6,7 @@
  * `--as rooms` (WRT-2) reads the plan back as rooms text instead: the way an agent writes a
  * plan, to change and write again with `grid write`, losing nothing.
  */
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
 import { readRoomsText } from '@ongrid/floorplan/rooms'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../describe/card'
 import { planFacts } from '../describe/facts'
@@ -55,12 +56,20 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
   }
 }
 
-/** The plan as rooms text, losing nothing: what `grid write` writes back as it is. */
+/**
+ * The plan as rooms text, losing nothing: what `grid write` writes back as it is. Its first line
+ * is the label as a comment (MSG-3), which writing it back ignores.
+ */
 export function describeRooms(loaded: LoadedPlan): string {
-  return readRoomsText(loaded.plan).text
+  return `# ${GENERAL_GUIDANCE_LABEL}\n${readRoomsText(loaded.plan).text}`
 }
 
 export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
+  // MSG-3: the label is the first line of every description, the one-line one too.
+  return `${GENERAL_GUIDANCE_LABEL}\n${describeBody(loaded, length, audience)}`
+}
+
+function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
   const text = describeText(planFacts(loaded.plan), length, audience)
   // CNT-12: the fixtures, counted, on the longer descriptions of a plan that has some.
   if (length === 'line' || (loaded.plan.items ?? []).length === 0) return text

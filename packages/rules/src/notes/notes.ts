@@ -23,6 +23,7 @@ import {
 import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
 import type { BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { ESCAPE_TOP_LEVEL, readForSentence, type VerificationStatus } from '../checks/figures'
+import { FIGURE_STATUS_WORDS } from '../checks/figureWords'
 import { wordings } from '../checks/messages'
 import type { AppliedFigure, FigureFindingCode, RuleFinding, RulesReport } from '../checks/types'
 
@@ -73,14 +74,10 @@ const metres = (value: number, against?: number): string =>
 /** A figure in centimetres, as it was given (ARE-7): 0.775 m is 77.5 cm. */
 const centimetres = (value: number): string => `${figureText(value * 100)} cm`
 
-/** How far a figure has been checked, as a reader is told. */
-const STATUS: Record<VerificationStatus, string> = {
-  'ai-found': 'Found by an AI and not yet checked by a person',
-  'human-entered': 'Entered by a person and not yet checked against the source',
-  'checked-once': 'Checked once against the source',
-  'checked-twice': 'Checked twice against the source',
-  disputed: 'Disputed'
-}
+/** How far a figure has been checked, as a reader is told: the words every report uses (MSG-3). */
+const STATUS = Object.fromEntries(
+  Object.entries(FIGURE_STATUS_WORDS).map(([status, text]) => [status, `${text.charAt(0).toUpperCase()}${text.slice(1)}`])
+) as Record<VerificationStatus, string>
 
 /**
  * Where a finding's figures come from and how far they have been checked, as one or two
@@ -133,7 +130,8 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
     switch (finding.code) {
       case 'room_too_small': {
         const measured = finding.area === undefined ? '' : `It measures ${areaText(finding.area, 2, finding.minimum)} m². `
-        const need = finding.minimum === undefined ? '' : `Rooms people sleep or live in need at least ${finding.minimum} m².`
+        // MSG-3: the figure used here, never what the room or the reader "needs".
+        const need = finding.minimum === undefined ? '' : `The figure used here for a room people sleep or live in is at least ${figureText(finding.minimum)} m².`
         return {
           ...base,
           tag: 'Size',
@@ -147,7 +145,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...base,
           tag: 'Escape',
           title: wordings.noEscapeOpening(shown),
-          detail: [words(`It needs a window or a door to the outside that someone can climb through. ${readForSentence([ESCAPE_TOP_LEVEL.provenance.readFor], stated)}.`)]
+          detail: [words(`The check looks for a window or a door to the outside that someone can climb through, and finds none. ${readForSentence([ESCAPE_TOP_LEVEL.provenance.readFor], stated)}.`)]
         }
       case 'escape_window_too_small': {
         const width = figure('escapeOpeningMinWidth')
@@ -157,7 +155,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...(width === undefined ? [] : [`${centimetres(width.value)} wide`]),
           ...(height === undefined ? [] : [`${centimetres(height.value)} tall`])
         ]
-        const need = needs.length === 0 ? '' : ` A bedroom on this floor needs at least ${needs.join(', ')}.`
+        const need = needs.length === 0 ? '' : ` The figure${needs.length === 1 ? '' : 's'} used here for a bedroom on this floor: at least ${needs.join(', ')}.`
         return {
           ...base,
           tag: 'Escape',
@@ -166,7 +164,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         }
       }
       case 'escape_window_too_high': {
-        const need = finding.maximum === undefined ? '' : ` It needs to be ${figureText(finding.maximum)} m or lower.`
+        const need = finding.maximum === undefined ? '' : ` The figure used here is a sill ${figureText(finding.maximum)} m or lower.`
         return {
           ...base,
           tag: 'Escape',

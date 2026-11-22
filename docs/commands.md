@@ -168,8 +168,10 @@ sill heights are one line: the usual height and the exceptions. What the plan ca
 such as where north is, the kind of building when the plan does not say it, how floors connect
 when no stair joins them and which rooms make each flat, is said as such; a kind the plan states
 is said after the first line. The stairs that join the floors are one line, with the risers and
-going Grid worked out. Directions are on the drawing, with north at the
-top. The card checks nothing; it ends with the label "General guidance, not your local rules".
+going Grid worked out. Directions are on the drawing, with north at the top. The card checks
+nothing and says so; its first line is the label "General guidance, not your local rules", as
+for every report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write`
+ignores, and `grid draw` puts it in the drawing's top-left corner.
 
 ## Walls that do not meet: `grid tidy`
 

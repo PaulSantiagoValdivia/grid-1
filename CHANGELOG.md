@@ -24,6 +24,10 @@ Grid has not been released yet. The first release will hold:
   be drawn, parts very likely wrong, what the checks found, and what they could not check.
 - Every report, `grid_check` and the check sheet list what the checks never look at, ceiling
   height and which walls carry load among them.
+- "General guidance, not your local rules" comes first in every report, list and tool answer,
+  and is on every drawing and in every DXF, IFC, GLB and OBJ file. No line says a plan passes,
+  complies or is approved, and a figure is given as the figure used here, with where it comes
+  from and how far a person has checked it.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
 - Every note and pass that used a figure says which kind of building the figure was read for:
   today, homes.
@@ -52,3 +56,7 @@ Grid has not been released yet. The first release will hold:
   rooms with holes, such as a courtyard.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
+- `grid check` says where an opening does not fit: a door or window that runs into a wall meeting
+  its wall, a wall that ends inside a window, an opening as long as its wall, a door on a dividing
+  line, and a window between two rooms (perhaps a borrowed light). `grid_split_room` will not end
+  a new wall inside a door or window, and says the nearest size that is clear.
