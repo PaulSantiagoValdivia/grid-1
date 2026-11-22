@@ -459,19 +459,15 @@ describe('floor ids that differ only by case or spacing', () => {
   })
 })
 
-/**
- * Known failures from the lab (entry Z-4), as expected failures. Each states the right
- * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
- * `it`. Each title starts with its lab entry ID.
- */
-describe('known failures (expected to fail until fixed)', () => {
+/** Known failures from the lab (entry Z-4) that MSG-16 fixed. */
+describe('lab failures fixed by MSG-16', () => {
   type P = [number, number]
   const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
   const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
   const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
   const divider = { id: 'v', start: [2.5, 0] as P, end: [2.5, 4] as P, virtual: true, height: 2.7 }
 
-  it.fails('MS-8 a door on a virtual wall is reported', () => {
+  it('MS-8 a door on a virtual wall is reported', () => {
     const { walls, room } = outline(RECT)
     const plan = planOf({
       walls: [...walls, divider],
@@ -482,7 +478,6 @@ describe('known failures (expected to fail until fixed)', () => {
     // room that does not match its space; that line is not what this probe asks for.
     expect(issuesOf(plan).some((i) => i.entity === 'opening' && i.id === 'd')).toBe(true)
   })
-
 })
 
 /** Known failures from the lab (entry Z-4) that MSG-6 fixed. */
