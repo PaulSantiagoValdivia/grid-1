@@ -22,10 +22,11 @@ import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 import { forSkia } from './skiaText'
 import { stampLabel } from './stamp'
 
-import { namedLook, type LookName } from './viewNames'
+import { pictureLook, type LookName } from './viewNames'
 
-function lookOf(look: LookName): 'working' | 'technical' | 'dark' {
-  return namedLook(look)
+/** SHT-10: a picture for an agent is always on light paper (`pictureLook`). */
+function lookOf(look: LookName): 'working' | 'technical' {
+  return pictureLook(look)
 }
 
 export interface PlanView {

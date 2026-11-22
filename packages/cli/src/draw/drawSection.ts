@@ -5,7 +5,7 @@
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { PlanSection, SectionLine } from '@ongrid/floorplan/geometry/section'
-import { pictureToSvg } from '@ongrid/viewer/src/picture/planSvg'
+import { fileLookOf, pictureToSvg } from '@ongrid/viewer/src/picture/planSvg'
 import { sectionPicture, type SectionPictureOptions } from '@ongrid/viewer/src/picture/section'
 import { pictureToPng } from './drawPlan'
 import { DEFAULT_LANGUAGE, joined, said, say, type Language } from '@ongrid/floorplan/messages'
@@ -17,7 +17,8 @@ export type DrawSectionOptions = SectionPictureOptions & ({ readonly format: 'sv
  * line `grid draw` prints on standard error about what it took.
  */
 export async function drawSection(plan: FloorPlan, line: SectionLine, options: DrawSectionOptions): Promise<{ file: string | Uint8Array; section: PlanSection; note: string | null }> {
-  const picture = sectionPicture(plan, line, options)
+  // SHT-10: a file is drawn on light paper, whatever the screen's theme.
+  const picture = sectionPicture(plan, line, { ...options, look: fileLookOf(options.look) })
   const file = options.format === 'svg' ? pictureToSvg(picture) : await pictureToPng(picture, { scale: options.scale ?? 1 })
   return { file, section: picture.section, note: sectionNote(picture.section, picture.language ?? DEFAULT_LANGUAGE) }
 }

@@ -25,7 +25,7 @@ import { UsageError } from '../command/options'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
-import { LOOKS, SIDES, namedLook, type LookName, type Side } from '../draw/viewNames'
+import { LOOKS, SIDES, pictureLook, type LookName, type Side } from '../draw/viewNames'
 import { MARK_WORDS, marksAsked, readMarks, sectionLineOf, towardOf } from '../command/section'
 import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { AREA_RULES, planAreas, type AreaSureness } from '../quantities/areas'
@@ -1703,7 +1703,7 @@ async function facadeAnswer(plan: FloorPlan, args: Record<string, unknown>, lang
   if (args['side'] === undefined) throw new ToolRefusal(`kind=facade needs side: the side of the drawing to draw, one of ${FACADE_SIDES.join(', ')} (north is the top of the drawing).`)
   const side = args['side'] as FacadeSide
   const asked = (args['look'] as LookName | undefined) ?? 'working'
-  const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
+  const look = asked === pictureLook(asked) ? asked : `${pictureLook(asked)} (asked as ${asked})`
   const { facadeView } = await import('../draw/views')
   const view = await facadeView(plan, { side, look: asked, language })
   const { facade } = view
@@ -1827,7 +1827,7 @@ const viewTool: GridTool = {
     const marksOnPlan = marksAsk !== undefined && markWords?.has('schedule') === true ? { ...marksAsk, schedule: scheduleMarkLabels(survey) } : marksAsk
     if (kind === 'plan') {
       const asked = (args['look'] as LookName | undefined) ?? 'working'
-      const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
+      const look = asked === pictureLook(asked) ? asked : `${pictureLook(asked)} (asked as ${asked})`
       const { planView } = await import('../draw/views')
       const withIds = args['ids'] === true
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'

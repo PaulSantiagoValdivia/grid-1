@@ -36,6 +36,9 @@ const TOKEN_OF: Record<Exclude<keyof PlanLook, 'font'>, string> = {
   room: '--plan-room',
   wall: '--plan-wall',
   wallExterior: '--plan-wall-exterior',
+  // SHT-10: the inside walls' and the partitions' fills.
+  wallInside: '--plan-wall-inside',
+  wallPartition: '--plan-wall-partition',
   virtual: '--plan-virtual',
   window: '--plan-window',
   label: '--plan-label',

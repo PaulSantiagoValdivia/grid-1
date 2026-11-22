@@ -8,7 +8,8 @@
  *
  * Pure: no DOM, no React.
  */
-import type { PlanDrawing, PlanNote, PlanSketch, Vec2 } from '@ongrid/floorplan/geometry'
+import type { PlanDrawing, PlanNote, PlanSketch, Vec2, WallDrawnKind } from '@ongrid/floorplan/geometry'
+import { hatchLines, wallDrawnKind } from '@ongrid/floorplan/geometry'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { estimateTextWidth } from '../canvas2d/labelPlacement'
 import type { PictureKey } from './faults'
@@ -109,9 +110,11 @@ export function northArrowNode(north: { readonly turn: number }, view: { readonl
 
 /** One entry of the drawing's key: a swatch and what it stands for. */
 export interface KeyEntry {
-  readonly swatch: 'fill' | 'line' | 'dash' | 'door' | 'mark'
+  readonly swatch: 'fill' | 'line' | 'dash' | 'door' | 'mark' | 'hatch'
   readonly color: string
   readonly words: string
+  /** SHT-10: a hatch swatch's line angles, in degrees counter-clockwise. */
+  readonly angles?: readonly number[]
 }
 
 /** What the key lists: only what this drawing shows, in `words`' language. */
@@ -126,16 +129,28 @@ export function keyEntries(
     readonly above?: boolean
     readonly painted?: readonly { readonly colour: string; readonly words: string }[]
     readonly phases?: PhaseLook
+    /** SHT-10: each kind of wall's fill, as the look draws it; the colours' own when left out. */
+    readonly walls?: Readonly<Record<WallDrawnKind, string>>
+    /** SHT-10: the room fills by use the drawing tints its rooms with; `USE_FILLS` when left out. */
+    readonly useFills?: Readonly<Record<RoomUse, string>>
+    /** SHT-10: the floor finishes the drawing tints its rooms by, each with its fill. */
+    readonly finishes?: readonly { readonly finish: string; readonly colour: string }[]
+    /** SHT-10: the wall materials the drawing hatches, each with its hatch's angles, in the ink. */
+    readonly materials?: readonly { readonly material: string; readonly angles: readonly number[]; readonly ink: string }[]
   },
   words: DrawingWords = ENGLISH_WORDS
 ): KeyEntry[] {
   const say = (key: Parameters<typeof drawingText>[1], values?: Parameters<typeof drawingText>[2]): string => drawingText(words, key, values)
   const entries: KeyEntry[] = []
   const solid = drawing.walls.filter((wall) => !wall.virtual && wall.phase === undefined)
-  if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.outsideWall') })
+  // SHT-10: each kind of wall in the fill the look draws it with.
+  const fill = shown.walls ?? { outside: look.wallExterior, inside: look.wallInside ?? look.wall, partition: look.wallPartition ?? look.wallInside ?? look.wall }
+  if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: fill.outside, words: say('drawing.key.outsideWall') })
   // CNT-6: a party wall, or one to the common parts, drawn as an outer wall of the home is.
-  if (solid.some((wall) => wall.exposure === 'separating')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.separatingWall') })
-  if (solid.some((wall) => wall.exposure !== 'exterior' && wall.exposure !== 'separating')) entries.push({ swatch: 'fill', color: look.wall, words: say('drawing.key.insideWall') })
+  if (solid.some((wall) => wall.exposure === 'separating')) entries.push({ swatch: 'fill', color: fill.outside, words: say('drawing.key.separatingWall') })
+  if (solid.some((wall) => wallDrawnKind(wall) === 'inside')) entries.push({ swatch: 'fill', color: fill.inside, words: say('drawing.key.insideWall') })
+  if (solid.some((wall) => wallDrawnKind(wall) === 'partition')) entries.push({ swatch: 'fill', color: fill.partition, words: say('drawing.key.partition') })
+  for (const entry of shown.materials ?? []) entries.push({ swatch: 'hatch', color: entry.ink, angles: entry.angles, words: say('drawing.key.material', { material: entry.material }) })
   // CNT-10: a plan with phases keys its walls by what the work does to them.
   const phased = drawing.walls.filter((wall) => !wall.virtual && wall.phase !== undefined)
   const phases = shown.phases
@@ -154,7 +169,8 @@ export function keyEntries(
   }
   // SHT-11: the floor above's outline, and a stair past its cut, drawn dashed.
   if (shown.above === true) entries.push({ swatch: 'dash', color: look.wall, words: say('drawing.key.above') })
-  for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: say('drawing.key.use', { use: roomUseWord(words, use) }) })
+  for (const use of shown.uses) entries.push({ swatch: 'fill', color: (shown.useFills ?? USE_FILLS)[use], words: say('drawing.key.use', { use: roomUseWord(words, use) }) })
+  for (const entry of shown.finishes ?? []) entries.push({ swatch: 'fill', color: entry.colour, words: say('drawing.key.finish', { finish: entry.finish }) })
   // CNT-9: the parts picked out, by what each colour stands for.
   for (const entry of shown.painted ?? []) entries.push({ swatch: 'fill', color: entry.colour, words: entry.words })
   if (shown.sketch) {
@@ -173,6 +189,8 @@ export function keyEntries(
 const MARGIN_PX = 16
 const LINE_PX_KEY = 18
 const SWATCH = { width: 22, height: 10 }
+/** SHT-10: how far apart a hatch swatch's lines are, in pixels. */
+const HATCH_SWATCH_PX = 3
 
 /**
  * The band under the drawing for its title and its key, in pixels from its top-left corner:
@@ -225,6 +243,17 @@ function swatchOf(entry: KeyEntry, look: PlanLook): SvgNode {
       return el('path', { 'data-part': 'key-swatch', d: `M2,${h}L2,0A${h},${h} 0 0 1 ${h + 2},${h}`, fill: 'none', stroke: entry.color, 'stroke-width': 1 })
     case 'mark':
       return el('circle', { 'data-part': 'key-swatch', cx: h / 2 + 2, cy: h / 2, r: h / 2 + 1, fill: entry.color })
+    case 'hatch': {
+      // SHT-10: the hatch across a box of paper, by the core's own lines. The key is drawn y down,
+      // so an angle counter-clockwise on the plan turns the other way here.
+      const ring = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }]
+      const lines = (entry.angles ?? []).flatMap((angle) => hatchLines(ring, HATCH_SWATCH_PX, (-angle * Math.PI) / 180))
+      const d = lines.map(([a, b]) => `M${n(a.x)},${n(a.y)}L${n(b.x)},${n(b.y)}`).join('')
+      return el('g', { 'data-part': 'key-swatch' }, [
+        el('rect', { x: 0, y: 0, width: w, height: h, fill: look.paper, stroke: look.labelSoft, 'stroke-width': 0.5 }),
+        ...(d === '' ? [] : [el('path', { d, fill: 'none', stroke: entry.color, 'stroke-width': 0.75 })])
+      ])
+    }
   }
 }
 

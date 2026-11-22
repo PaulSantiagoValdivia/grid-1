@@ -2346,5 +2346,8 @@ export const es: Messages = {
   'describe.column.square': '{label}{width} × {depth} m en {at}{room}',
   'describe.column.round': '{label}redondo de {width} m en {at}{room}',
   'describe.column.label': '{label}, ',
-  'describe.column.in': ', en {room}'
+  'describe.column.in': ', en {room}',
+  'drawing.key.partition': 'Tabique',
+  'drawing.key.material': 'Muro: {material}',
+  'drawing.key.finish': 'Suelo: {finish}'
 }

@@ -23,6 +23,7 @@ import {
   floorAbove,
   openingSymbol,
   planForFloor,
+  planWallMaterials,
   resolveFloor,
   validateFloorDoorSweeps,
   withPatterns
@@ -33,7 +34,7 @@ import { doorHandingOf } from '../canvas2d/doorHanding'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
-import { LOOKS, lengthText, toLook } from './look'
+import { LOOKS, detailShown, fileLook, lengthText, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
@@ -87,7 +88,10 @@ export interface PictureOptions {
    * the band under the drawing; `key: true` adds a key the plan does not ask for), `notes`,
    * `sketch`, `areas`, `swings`, `warnings` (door warnings and MSG-8's marks and list) and
    * `above` (SHT-11: the dashed outline of the floor above).
-   * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
+   * `colourBy: 'use'` fills each room by its use, SHT-10's `colourBy: 'finish'` by its floor
+   * finish (CNT-15), and either puts what each fill stands for in the key, which is then drawn
+   * unless `key: false` leaves it off. So is the key of a drawing whose walls are hatched by
+   * their material (SHT-10's detail, at 1:50 and larger).
    */
   readonly show?: PictureShow
   /**
@@ -116,7 +120,7 @@ export interface PictureShow {
   readonly swings?: boolean
   readonly warnings?: boolean
   readonly above?: boolean
-  readonly colourBy?: 'use' | null
+  readonly colourBy?: 'use' | 'finish' | null
   /**
    * CNT-9: parts picked out, by id, each in its colour (`GROUP_COLOURS`, `HIGHLIGHT_COLOUR`), and
    * what each colour stands for in the key, which is then drawn.
@@ -224,6 +228,14 @@ export function framingOf(drawing: PlanDrawing, dimensions: readonly Dimension[]
   return boundsWithDimensions(drawing, dimensions)
 }
 
+/**
+ * SHT-10: the look a picture written to a file or handed to an agent is drawn in: the one asked
+ * for, on light paper whatever the screen's theme (`fileLook`): `dark` draws the working look.
+ */
+export function fileLookOf(look: PictureOptions['look']): Look {
+  return fileLook(lookOf(look))
+}
+
 /** The look a picture is drawn in. */
 export function lookOf(look: PictureOptions['look']): Look {
   if (look === undefined || look === 'light') return LOOKS.working
@@ -319,6 +331,12 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const show = options.show ?? {}
   const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key' | 'paint' | 'paintKey'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
+  // SHT-10: each room's floor finish, and the plan's finishes in the order its rooms first name
+  // them, so a finish keeps its tint on every floor; the plan's wall materials, for their hatch.
+  const finishOrder = [...new Set(plan.rooms.flatMap((room) => (room.finishes?.floor === undefined ? [] : [room.finishes.floor])))]
+  const finishes = { rooms: new Map(slice.rooms.flatMap((room) => (room.finishes?.floor === undefined ? [] : [[room.id, room.finishes.floor] as const]))), order: finishOrder }
+  const materials = planWallMaterials(plan)
+  const mpp = view.width / width
   // SHT-11: the floor above, worked out only when it is shown.
   const above = on('above') ? floorAbove(slice) : undefined
   const scene = planScene({
@@ -326,13 +344,15 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     handings,
     doorWarnings: warningMessages(doorWarningsOf(slice, drawing, words)),
     dimensions,
-    metersPerPixel: view.width / width,
+    metersPerPixel: mpp,
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
     // WRT-7: the labels and dimensions are in the call's display, else the plan's own.
     labels: display === undefined ? options.labels : { ...options.labels, display },
     faults,
     uses,
+    finishes,
+    materials,
     ...(above === undefined ? {} : { above }),
     // ARE-15: the schedules' marks go by the room labels, which the scene places.
     ...(marks === null || marks.schedule.length === 0 ? {} : { scheduleMarks: marks.schedule }),
@@ -354,10 +374,20 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const title = on('title') ? (plan.title ?? null) : null
   const painted = show.paintKey ?? []
   // CNT-10: a drawing of work keys its phases unless the key is turned off.
-  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key') || drawing.walls.some((wall) => wall.phase !== undefined)))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
+  // SHT-10: the floor finishes tinted on this floor, and the materials hatched on it.
+  const tinted = look.tints.finishes
+  const shownFinishes = show.colourBy === 'finish' && tinted.length > 0 ? finishOrder.filter((finish) => drawing.rooms.some((room) => finishes.rooms.get(room.id) === finish)).map((finish) => ({ finish, colour: tinted[finishOrder.indexOf(finish) % tinted.length]! })) : []
+  const detail = detailShown(look, mpp, options.paperScale) ? look.detail : null
+  const shownMaterials =
+    detail === null || detail.hatches.length === 0
+      ? []
+      : materials.filter((material) => drawing.walls.some((wall) => !wall.virtual && wall.phase !== 'demolished' && wall.material === material)).map((material) => ({ material, angles: detail.hatches[materials.indexOf(material) % detail.hatches.length]!, ink: look.ink }))
+  // CNT-10: a drawing of work keys its phases unless the key is turned off. SHT-10: so does one
+  // whose colours or hatches carry a meaning of the plan's own: its rooms tinted, its walls hatched.
+  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key') || drawing.walls.some((wall) => wall.phase !== undefined) || shownUses.length > 0 || shownFinishes.length > 0 || shownMaterials.length > 0))
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted, phases: look.phases }, words) : []
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted, phases: look.phases, walls: look.walls.fill, useFills: look.tints.uses, finishes: shownFinishes, materials: shownMaterials }, words) : []
   const writing = writingBand(title, entries, width, look.colors, words)
   const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors, words)
   const key = stackBands(writing, listed)

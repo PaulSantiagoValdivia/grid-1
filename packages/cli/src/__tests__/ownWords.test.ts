@@ -39,7 +39,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/check.ts': [10, 'command'],
   'packages/cli/src/command/describe.ts': [9, 'command'],
   'packages/cli/src/command/diff.ts': [13, 'command'],
-  'packages/cli/src/command/draw.ts': [44, 'command'],
+  // SHT-10: one more, the refusal of --look dark for a file.
+  'packages/cli/src/command/draw.ts': [45, 'command'],
   'packages/cli/src/command/drawShow.ts': [4, 'command'],
   'packages/cli/src/command/edit.ts': [9, 'command'],
   'packages/cli/src/command/export.ts': [17, 'command'],
@@ -144,7 +145,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
   // CNT-16: +5, what the three column and grid entries decide.
-  'packages/floorplan/src/geometry/tolerances.ts': [250, 'developer'],
+  // SHT-10: five more pieces of the table's own descriptions (sillProjection, and the frame and glass entries).
+  'packages/floorplan/src/geometry/tolerances.ts': [255, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [2, 'developer'],
@@ -262,8 +264,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // and CNT-15 29: the type change's receipts and refusals (edit/types.ts 14), a knock-through's
     // finish refusal and receipts (merge.ts 2), the estimate's type and finish rules and lines
     // (estimate.ts 6), the finish and wall type rules (finishes.ts 2), the IFC's two type notes
-    // (ifc.ts 2) and the schema's three blank-name refusals (floorplan.ts 3) (reviews/CNT-15.md).
-    expect(left).toBeLessThanOrEqual(1540)
+    // (ifc.ts 2) and the schema's three blank-name refusals (floorplan.ts 3) (reviews/CNT-15.md);
+    // and SHT-10 1: grid draw's refusal of --look dark for a file (draw.ts) (reviews/SHT-10.md).
+    expect(left).toBeLessThanOrEqual(1541)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

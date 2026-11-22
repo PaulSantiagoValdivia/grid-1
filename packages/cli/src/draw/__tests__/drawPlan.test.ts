@@ -90,12 +90,20 @@ describe('drawPlan', () => {
   })
 
   it('takes the picture options: size, look, dimensions', async () => {
-    const png = await drawPlan(twoBedFlat(), { format: 'png', width: 640, height: 480, look: 'dark' })
+    const png = await drawPlan(twoBedFlat(), { format: 'png', width: 640, height: 480, look: 'technical' })
     expect(pngSize(png)).toEqual({ width: 640, height: 480 })
-    expect(await pixelAt(png, 2, 2)).toBe(DARK_LOOK.paper)
-    expect(await drawPlan(twoBedFlat(), { format: 'svg', look: 'dark', showDimensions: false })).toBe(
-      planToSvg(twoBedFlat(), { look: 'dark', showDimensions: false })
+    expect(await pixelAt(png, 2, 2)).toBe('#ffffff')
+    expect(await drawPlan(twoBedFlat(), { format: 'svg', look: 'technical', showDimensions: false })).toBe(
+      planToSvg(twoBedFlat(), { look: 'technical', showDimensions: false })
     )
+  })
+
+  it('draws a file on light paper whatever look it is asked for: dark draws the working look (SHT-10)', async () => {
+    const png = await drawPlan(twoBedFlat(), { format: 'png', width: 640, height: 480, look: 'dark' })
+    expect(await pixelAt(png, 2, 2)).toBe(LIGHT_LOOK.paper)
+    expect(await pixelAt(png, 2, 2)).not.toBe(DARK_LOOK.paper)
+    expect(await drawPlan(twoBedFlat(), { format: 'svg', look: 'dark' })).toBe(await drawPlan(twoBedFlat(), { format: 'svg', look: 'working' }))
+    expect(await drawPlan(twoBedFlat(), { format: 'svg', look: DARK_LOOK })).toBe(await drawPlan(twoBedFlat(), { format: 'svg', look: 'working' }))
   })
 
   it('refuses a format or a scale it cannot draw', async () => {

@@ -15,7 +15,7 @@
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { FacadePictureOptions, Picture, PictureOptions } from '@ongrid/viewer/src/picture'
-import { facadePicture, fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
+import { facadePicture, fileLookOf, fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
 import { forSkia } from './skiaText'
 
@@ -43,7 +43,8 @@ export interface DrawOptions extends PictureOptions {
  *
  * Every other option is `planToSvg`'s: `floor` (the lowest by default), `width` (1200 px by
  * default), `height` (follows the plan's shape by default), `look` (`working`, the default,
- * `technical` or `dark`, or your own colours), `paperScale` (the technical look's 1:N) and
+ * or `technical`, or your own colours; SHT-10: a file is always on light paper, so `dark`, or
+ * colours of your own on dark paper, draw the working look), `paperScale` (the technical look's 1:N) and
  * `showDimensions` (on by default) and `faults` (the result record's lines, to mark what went
  * wrong on the drawing and list it under it; none by default).
  *
@@ -60,7 +61,8 @@ export function drawPlan(plan: FloorPlan, options: DrawOptions & { format: 'png'
 export function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array>
 export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array> {
   const { format, scale = 1, label = true, ...pictureOptions } = options
-  const picture = planPicture(plan, pictureOptions)
+  // SHT-10: a file is drawn on light paper, whatever the screen's theme.
+  const picture = planPicture(plan, { ...pictureOptions, look: fileLookOf(pictureOptions.look) })
   if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
   return pictureToPng(picture, { scale, label })
@@ -76,7 +78,7 @@ export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { fo
 export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array>
 export async function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array> {
   const { format, scale = 1, label = true, ...pictureOptions } = options
-  const picture = facadePicture(plan, pictureOptions)
+  const picture = facadePicture(plan, { ...pictureOptions, look: fileLookOf(pictureOptions.look) })
   if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
   return pictureToPng(picture, { scale, label })

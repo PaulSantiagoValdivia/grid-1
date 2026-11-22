@@ -34,6 +34,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
     <path
       d="M2.4000,-0.1000L3.9000,-0.1000L4.1000,0.1000L2.4000,0.1000Z"
@@ -42,6 +43,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -52,6 +54,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -62,6 +65,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
     <path
       d="M1.8000,-2.9000L0.1000,-2.9000L-0.1000,-3.1000L1.8000,-3.1000Z"
@@ -70,6 +74,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -80,6 +85,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -90,6 +96,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -100,6 +107,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -110,6 +118,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <g>
@@ -120,6 +129,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="wall"
       data-selectable="true"
       data-selected="false"
+      data-wall-kind="outside"
     />
   </g>
   <path

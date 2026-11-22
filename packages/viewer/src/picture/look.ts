@@ -12,7 +12,16 @@
  *   door with no stated swing marked as undecided, and dimensions with 45-degree ticks and
  *   their numbers along the line (SHT-4). Its lines are in millimetres on paper, from a pen set
  *   chosen by the output scale (1:50, 1:100 or 1:200).
- * - `dark`: the working look on dark paper, as the app's dark theme.
+ * - `dark`: the working look on dark paper, as the app's dark theme. A screen look only: a picture
+ *   written to a file or handed to an agent is always drawn on light paper (`fileLook`, SHT-10).
+ *
+ * SHT-10's refinements are options of each look: walls drawn by kind (`walls`: outside, inside and
+ * partition each with its own fill and, on paper, its own pen), what lies above the plan's cut
+ * dashed (`aboveDashed`), the detail a drawing at 1:50 or larger shows (`detail`: each wall
+ * material's hatch, door and window frames, a window's two panes and its sills), and the tints a
+ * drawing coloured by room use or floor finish fills its rooms with (`tints`), which the key then
+ * lists. Every colour a look draws text or a symbol in is held to a contrast ratio against what it
+ * is drawn on (`contrast.ts`, `lookPairs`).
  *
  * The app's stylesheets (`plan-tokens.css`, `canvas2d/plan.css`) say the working look again in
  * CSS. A test reads both sheets and checks every value here against them, so a restyle that
@@ -21,6 +30,8 @@
  * Pure: no DOM.
  */
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
+import type { WallDrawnKind } from '@ongrid/floorplan/geometry'
+import { relativeLuminance } from './contrast'
 
 /** A look's colours. */
 export interface PlanLook {
@@ -28,6 +39,10 @@ export interface PlanLook {
   readonly room: string
   readonly wall: string
   readonly wallExterior: string
+  /** SHT-10: an inside wall's fill, where it differs from `wall` (the ink); `wall` when left out. */
+  readonly wallInside?: string
+  /** SHT-10: a partition's fill; the inside wall's when left out. */
+  readonly wallPartition?: string
   readonly virtual: string
   readonly window: string
   readonly label: string
@@ -53,15 +68,19 @@ export const LIGHT_LOOK: PlanLook = {
   room: '#f2efe7',
   wall: '#232320',
   wallExterior: '#121210',
-  virtual: '#b3afa2',
+  // SHT-10: the inside walls a mid grey and the partitions lighter, so the outside walls read
+  // apart from them; the soft lines and text darker, to hold their contrast on every room fill.
+  wallInside: '#57544e',
+  wallPartition: '#827e75',
+  virtual: '#817e75',
   window: '#dce9f2',
   label: '#232320',
-  labelSoft: '#75726a',
+  labelSoft: '#66635c',
   dimension: '#6f6c63',
-  dimensionSoft: '#a9a598',
+  dimensionSoft: '#817e75',
   dimensionText: '#4a483f',
-  dimensionSoftText: '#75726a',
-  warning: '#b4531a',
+  dimensionSoftText: '#66635c',
+  warning: '#a14a17',
   font: PICTURE_FONT
 }
 
@@ -71,14 +90,16 @@ export const DARK_LOOK: PlanLook = {
   room: '#23201a',
   wall: '#ddd8cc',
   wallExterior: '#f3f1ec',
-  virtual: '#635a4d',
+  wallInside: '#aea9a2',
+  wallPartition: '#847d72',
+  virtual: '#817a70',
   window: '#22323d',
   label: '#ddd8cc',
-  labelSoft: '#8a8175',
+  labelSoft: '#9f988e',
   dimension: '#a9a598',
-  dimensionSoft: '#635a4d',
+  dimensionSoft: '#817a70',
   dimensionText: '#c9c4b6',
-  dimensionSoftText: '#8a8175',
+  dimensionSoftText: '#9f988e',
   warning: '#f2a774',
   font: PICTURE_FONT
 }
@@ -161,6 +182,49 @@ export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
 }
 
 /**
+ * SHT-10: the room fills by use on dark paper: each use's hue from `USE_FILLS`, dark, so the
+ * light text and walls of the dark look hold their contrast on them.
+ */
+export const DARK_USE_FILLS: Readonly<Record<RoomUse, string>> = {
+  bedroom: '#162334',
+  living: '#3a2b07',
+  dining: '#3c230e',
+  kitchen: '#233514',
+  bathroom: '#0e2f2f',
+  toilet: '#0e2c31',
+  utility: '#272d18',
+  study: '#352810',
+  office: '#201d2f',
+  meeting: '#1d1d32',
+  reception: '#271d29',
+  retail: '#331d1d',
+  classroom: '#222f1a',
+  treatment: '#122a30',
+  waiting: '#1c2629',
+  sport: '#20301d',
+  changing: '#1a2c26',
+  staff: '#302715',
+  worship: '#352513',
+  assembly: '#291c28',
+  corridor: '#28261f',
+  stair: '#221a2f',
+  lift: '#1d212f',
+  storage: '#2d261a',
+  plant: '#28251f',
+  parking: '#262620',
+  other: '#252522'
+}
+
+/**
+ * SHT-10: the room fills by floor finish, one per finish the plan names, in the order its rooms
+ * first name them; past the last, they start again. Pale, as the fills by use are.
+ */
+export const FINISH_FILLS: readonly string[] = ['#efe4cf', '#e1eaf2', '#e6efdc', '#f2e4e4', '#e9e5f2', '#f3ebd3', '#dfefea', '#efe7de']
+
+/** SHT-10: the room fills by floor finish on dark paper. */
+export const DARK_FINISH_FILLS: readonly string[] = ['#3a290a', '#172531', '#253216', '#321d1d', '#221c2f', '#382c08', '#172f27', '#312517']
+
+/**
  * CNT-9: the colours a drawing picks parts out in, from the tool server's `highlight` and
  * `colour` by a field: one per value, in turn, strong enough to read on a wall or a door and
  * laid over a room's fill at half strength. `HIGHLIGHT` is the one colour of parts picked out.
@@ -241,6 +305,10 @@ export type LinePart =
   | 'column'
   /** CNT-16: a structural grid's chain lines and the circles its names are written in. */
   | 'grid'
+  /** SHT-10: a door's or window's frame, on a drawing in detail. */
+  | 'frame'
+  /** SHT-10: a window's sill, on a drawing in detail. */
+  | 'sill'
 
 /** The parts of the drawing a look gives a dash pattern. */
 export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain' | 'boundary' | 'demolished'
@@ -295,6 +363,50 @@ export interface Look {
   readonly phases: PhaseLook
   /** BRF-3: the site's colours: the plot and what is on it, drawn in their own style, never as walls or rooms. */
   readonly site: SiteColors
+  /** SHT-10: how each kind of wall is drawn (`wallDrawnKind` in the core). */
+  readonly walls: WallKindsLook
+  /** SHT-10: what lies above the plan's cut drawn dashed: a stair past its cut, a symbol's line overhead, a high window. */
+  readonly aboveDashed: boolean
+  /** SHT-10: the detail drawn at 1:50 or larger, or null for none at any scale. */
+  readonly detail: DetailLook | null
+  /** SHT-10: the room fills of a drawing coloured by room use or by floor finish. */
+  readonly tints: TintLook
+}
+
+/**
+ * SHT-10: how each kind of wall reads. `fill` is the wall's fill (a tone inside the outline, in a
+ * look that outlines its walls); `pen` the pen of the outline round it, in a paper look that
+ * outlines its walls. A wall's phase (CNT-10), where the look gives one, fills it instead.
+ */
+export interface WallKindsLook {
+  readonly fill: Readonly<Record<WallDrawnKind, string>>
+  readonly pen?: Readonly<Record<WallDrawnKind, Pen>>
+}
+
+/**
+ * SHT-10: the detail a drawing at a large scale shows: each wall material's hatch (CNT-15's wall
+ * types), a door's and a window's frames, a window's glass as two panes and its sills. The core
+ * works each out (`hatchLines`, `openingDetail`); the look only says when, and how.
+ */
+export interface DetailLook {
+  /**
+   * The smallest scale it is drawn at, as N in 1:N: a drawing whose pen set (`penSetFor`) is this
+   * scale's, or a larger scale's, shows it.
+   */
+  readonly from: PaperScale
+  /** How far apart a hatch's lines are, in millimetres on paper. */
+  readonly hatchSpacing: number
+  /**
+   * Each material's hatch, in turn by `planWallMaterials`: the angles of its lines, in degrees
+   * counter-clockwise from the plan's x. Past the last, they start again.
+   */
+  readonly hatches: readonly (readonly number[])[]
+}
+
+/** SHT-10: the room fills of a drawing coloured by use (`uses`) or by floor finish (`finishes`, in turn). */
+export interface TintLook {
+  readonly uses: Readonly<Record<RoomUse, string>>
+  readonly finishes: readonly string[]
 }
 
 /** BRF-3: how the site is drawn in a look. A fill of `none` leaves the paper. */
@@ -320,13 +432,14 @@ export const LIGHT_SITE: SiteColors = {
   fence: '#75726a',
   gate: '#4a483f',
   pathFill: '#ebe5d6',
-  pathEdge: '#b3afa2',
+  // SHT-10: the edges darker, to hold their contrast on the paper and on their own fills.
+  pathEdge: '#86827a',
   pavingFill: '#e2ded3',
-  pavingEdge: '#a9a598',
+  pavingEdge: '#827e75',
   poolFill: '#cfe5f1',
-  poolEdge: '#5b8fb0',
+  poolEdge: '#467694',
   treeFill: '#dce9cf',
-  treeEdge: '#6f9256'
+  treeEdge: '#577a40'
 }
 
 /** BRF-3: the site in the dark theme. */
@@ -336,11 +449,11 @@ export const DARK_SITE: SiteColors = {
   fence: '#8a8175',
   gate: '#c9c4b6',
   pathFill: '#2b2820',
-  pathEdge: '#635a4d',
+  pathEdge: '#857c6e',
   pavingFill: '#302c24',
-  pavingEdge: '#6f6758',
+  pavingEdge: '#8a8172',
   poolFill: '#1d3542',
-  poolEdge: '#5b8fb0',
+  poolEdge: '#6c9fc0',
   treeFill: '#22301b',
   treeEdge: '#7fa566'
 }
@@ -440,7 +553,10 @@ const SCREEN_LINES: ScreenLines = {
     // CNT-16: a column and a structural grid, which the app draws only through this tree, so
     // plan.css has none.
     column: 1,
-    grid: 0.75
+    grid: 0.75,
+    // SHT-10: the detail only paper draws, so plan.css has none.
+    frame: 0.75,
+    sill: 0.75
   },
   dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3], chain: [12, 3, 2, 3], demolished: DEMOLISHED_PX.dash }
 }
@@ -494,7 +610,10 @@ const PAPER_LINES: PaperLines = {
     demolished: 'medium',
     // CNT-16: a column is cut, as a wall is; a structural grid's lines and circles are finest.
     column: 'cut',
-    grid: 'finest'
+    grid: 'finest',
+    // SHT-10: a frame and a sill fine, the material hatch (`hatch`) finest.
+    frame: 'fine',
+    sill: 'finest'
   },
   dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1], chain: [6, 1.5, 0.8, 1.5], demolished: [2, 1] }
 }
@@ -504,7 +623,10 @@ export const TECHNICAL_COLORS: PlanLook = {
   paper: '#ffffff',
   room: '#ffffff',
   wall: '#8c8c8c',
-  wallExterior: '#8c8c8c',
+  // SHT-10: the outside walls a darker tone than the inside ones, a partition the palest.
+  wallExterior: '#595959',
+  wallInside: '#8c8c8c',
+  wallPartition: '#c8c8c8',
   virtual: '#595959',
   window: '#ffffff',
   label: '#000000',
@@ -517,6 +639,15 @@ export const TECHNICAL_COLORS: PlanLook = {
   font: PICTURE_FONT
 }
 
+/** SHT-10: each kind of wall's fill from a look's colours: the outside walls', the inside walls' and the partitions'. */
+export function wallFillsOf(colors: PlanLook): WallKindsLook['fill'] {
+  const inside = colors.wallInside ?? colors.wall
+  return { outside: colors.wallExterior, inside, partition: colors.wallPartition ?? inside }
+}
+
+/** SHT-10: the light tints, by use (SHT-7) and by floor finish. */
+const LIGHT_TINTS: TintLook = { uses: USE_FILLS, finishes: FINISH_FILLS }
+
 /** The screen and every picture an agent gets: the app's light theme. */
 export const WORKING_LOOK: Look = {
   name: 'working',
@@ -528,12 +659,26 @@ export const WORKING_LOOK: Look = {
   undecidedDoors: false,
   draftedDimensions: false,
   // CNT-10: what stays in a mid tone, the new walls as walls are drawn, the demolished dashed in ink.
-  phases: { existing: '#9b968b', new: null, demolished: LIGHT_LOOK.wall },
-  site: LIGHT_SITE
+  phases: { existing: '#7f7a70', new: null, demolished: LIGHT_LOOK.wall },
+  site: LIGHT_SITE,
+  walls: { fill: wallFillsOf(LIGHT_LOOK) },
+  aboveDashed: true,
+  // SHT-10: the screen is not paper: it draws no detail at any zoom.
+  detail: null,
+  tints: LIGHT_TINTS
 }
 
-/** The working look on dark paper: the app's dark theme. */
-export const DARK_WORKING_LOOK: Look = { ...WORKING_LOOK, name: 'dark', colors: DARK_LOOK, ink: DARK_LOOK.wall, site: DARK_SITE, phases: { existing: '#7a7266', new: null, demolished: DARK_LOOK.wall } }
+/** The working look on dark paper: the app's dark theme. A screen look: a file is never drawn in it (`fileLook`). */
+export const DARK_WORKING_LOOK: Look = {
+  ...WORKING_LOOK,
+  name: 'dark',
+  colors: DARK_LOOK,
+  ink: DARK_LOOK.wall,
+  site: DARK_SITE,
+  phases: { existing: '#867e70', new: null, demolished: DARK_LOOK.wall },
+  walls: { fill: wallFillsOf(DARK_LOOK) },
+  tints: { uses: DARK_USE_FILLS, finishes: DARK_FINISH_FILLS }
+}
 
 /** Sheets and files to hand on: black on white, with lines in millimetres on paper. */
 export const TECHNICAL_LOOK: Look = {
@@ -547,7 +692,15 @@ export const TECHNICAL_LOOK: Look = {
   draftedDimensions: true,
   // CNT-10: what stays in the grey tone walls have, the new walls filled black, the demolished dashed.
   phases: { existing: null, new: '#000000', demolished: '#000000' },
-  site: TECHNICAL_SITE
+  site: TECHNICAL_SITE,
+  // SHT-10: outside and inside walls outlined with the cut pen, a partition with the medium one;
+  // each a tone of its own inside.
+  walls: { fill: wallFillsOf(TECHNICAL_COLORS), pen: { outside: 'cut', inside: 'cut', partition: 'medium' } },
+  aboveDashed: true,
+  // SHT-10: at 1:50 and larger, hatches 1.5 mm apart: diagonal one way, the other way, crossed,
+  // then level, upright and squared, for each material in turn.
+  detail: { from: 50, hatchSpacing: 1.5, hatches: [[45], [-45], [45, -45], [0], [90], [0, 90]] },
+  tints: LIGHT_TINTS
 }
 
 export const LOOKS: Readonly<Record<LookName, Look>> = {
@@ -556,9 +709,48 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   dark: DARK_WORKING_LOOK
 }
 
+/** SHT-10: the named looks a file is drawn in: those on light paper (`fileLook`). `dark` is the screen's only. */
+export const FILE_LOOK_NAMES: readonly LookName[] = LOOK_NAMES.filter((name) => fileLook(LOOKS[name]) === LOOKS[name])
+
 /** Colours of your own, drawn the working way. */
 export function lookWithColors(colors: PlanLook): Look {
-  return { ...WORKING_LOOK, name: 'custom', colors, ink: colors.wall }
+  return { ...WORKING_LOOK, name: 'custom', colors, ink: colors.wall, walls: { fill: wallFillsOf(colors) } }
+}
+
+/**
+ * SHT-10: the look a picture written to a file or handed to an agent is drawn in. A file is always
+ * on light paper, whatever the screen's theme: a look on dark paper (the dark look, or colours of
+ * your own on a dark paper) gives the working look; any other is itself.
+ */
+export function fileLook(look: Look): Look {
+  return relativeLuminance(look.colors.paper) < 0.5 ? WORKING_LOOK : look
+}
+
+/**
+ * SHT-10: whether a drawing in this look, at this zoom and output scale, shows the look's detail:
+ * a paper look whose pen set for the scale is its detail's scale or a larger one.
+ */
+export function detailShown(look: Look, metresPerPixel: number, paperScale?: number): boolean {
+  if (look.detail === null || look.lines.unit !== 'mm') return false
+  return penSetFor(paperScale ?? paperScaleOf(metresPerPixel)) <= look.detail.from
+}
+
+/**
+ * SHT-10: the width of the outline round a wall of this kind, in plan metres: twice its pen (the
+ * wall's fill covers the inner half), the kind's own pen in a paper look that gives one.
+ */
+export function wallOutlineMetres(look: Look, kind: WallDrawnKind, metresPerPixel: number, paperScale?: number): number {
+  const { lines } = look
+  const pen = look.walls.pen?.[kind]
+  if (lines.unit === 'px' || pen === undefined) return 2 * lineMetres(look, metresPerPixel, paperScale).width('wallOutline')
+  const scale = paperScale ?? paperScaleOf(metresPerPixel)
+  return (2 * lines.pens[penSetFor(scale)][pen] * scale) / 1000
+}
+
+/** SHT-10: how far apart a detail's hatch lines are, in plan metres, at this zoom and output scale. */
+export function hatchSpacingMetres(look: Look, metresPerPixel: number, paperScale?: number): number {
+  if (look.detail === null) return 0
+  return (look.detail.hatchSpacing * (paperScale ?? paperScaleOf(metresPerPixel))) / 1000
 }
 
 /** How long a CSS pixel is on paper, in millimetres: 96 to the inch. */

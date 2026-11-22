@@ -11,7 +11,7 @@
  * Written to `--out`, or to standard output when no file is named.
  */
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
-import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
+import { FILE_LOOK_NAMES, LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
 import { FACADE_SIDES, cameraRecord, findView, viewSetting, type FacadeSide } from '@ongrid/floorplan/geometry'
 import { drawFacade, drawPlan } from '../draw/drawPlan'
@@ -32,7 +32,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--view': { takesValue: true, help: 'Draw a view saved with the plan (grid_save_view), by name: the 3D model through its camera, as a PNG of 1200 by 800 pixels.' },
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
-  '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
+  '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper) or working (as on screen, on light paper). Not with --3d.' },
   '--hide': { takesValue: true, help: 'Parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings, above (the dashed outline of the floor above). Not with --3d.' },
   '--colour': { takesValue: true, help: 'use: fill each room by its use, with the uses in the key. Not with --3d.' },
   '--key': { takesValue: false, help: 'Add a key under the drawing, even where the plan asks for none. Not with --3d.' },
@@ -147,8 +147,13 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   askedLanguage(request.lang)
   sectionAsked(request)
   const look = (request.look ?? DRAW_LOOK) as LookName
-  if (!(LOOK_NAMES as readonly string[]).includes(look)) {
-    throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${LOOK_NAMES.join(', ')}.`)
+  // SHT-10: a file is always drawn on light paper, so the screen's dark look is refused by name.
+  // SHT-10 adds one sentence here (ownWords.test.ts).
+  if ((LOOK_NAMES as readonly string[]).includes(look) && !FILE_LOOK_NAMES.includes(look)) {
+    throw new UsageError(`--look ${look} is the screen's dark theme, and a file is always drawn on light paper: use one of ${FILE_LOOK_NAMES.join(', ')}.`)
+  }
+  if (!(FILE_LOOK_NAMES as readonly string[]).includes(look)) {
+    throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${FILE_LOOK_NAMES.join(', ')}.`)
   }
   const png = request.png || request.threeD === true
   const extension = png ? '.png' : '.svg'

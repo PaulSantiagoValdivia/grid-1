@@ -28,13 +28,26 @@
   fill: var(--plan-wall-exterior, #121210);
 }
 
+/* SHT-10: each kind of wall reads apart: outside (and party walls) darkest, inside walls a mid
+   grey, partitions lighter. Kept at the plain wall's weight (`:where`), so selection, which
+   comes later, still wins. */
+.canvas [data-part='wall']:where([data-wall-kind='outside']) {
+  fill: var(--plan-wall-exterior, #121210);
+}
+.canvas [data-part='wall']:where([data-wall-kind='inside']) {
+  fill: var(--plan-wall-inside, #57544e);
+}
+.canvas [data-part='wall']:where([data-wall-kind='partition']) {
+  fill: var(--plan-wall-partition, #827e75);
+}
+
 /* The divider with no substance, between rooms that open into each other.
    With non-scaling-stroke the width and the dashes are read in screen pixels,
    not in the meters the viewBox is measured in — written as meters they come
    out at a hundredth of a pixel and the line never shows up. */
 .canvas [data-part='virtual'] {
   fill: none;
-  stroke: var(--plan-virtual, #b3afa2);
+  stroke: var(--plan-virtual, #817e75);
   stroke-width: 1.5;
   stroke-dasharray: 7 5;
   vector-effect: non-scaling-stroke;
@@ -55,6 +68,11 @@
 
 .canvas [data-part='opening'][data-type='window'] {
   fill: var(--plan-window, #dce9f2);
+}
+
+/* SHT-10: a window above the plan's cut, its outline dashed as what lies above. */
+.canvas [data-part='opening'][data-type='window'][data-above='true'] {
+  stroke-dasharray: 4 3;
 }
 
 /* ── Door symbol ──────────────────────────────────────────────────────
@@ -168,13 +186,13 @@
 }
 
 .canvas [data-part='door-warning-dot'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   stroke: var(--plan-paper, #ffffff);
   stroke-width: 1.5;
 }
 
 .canvas [data-part='door-warning-text'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   font-family: var(--font-sans);
   font-size: 12px;
   paint-order: stroke;
@@ -188,7 +206,7 @@
 /* SHT-7: the sketch layer, drawn only, in a soft line; and the notes, tags and symbols. */
 .canvas path[data-part='sketch'] {
   fill: none;
-  stroke: var(--plan-label-soft, #75726a);
+  stroke: var(--plan-label-soft, #66635c);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -206,9 +224,9 @@
 /* A room that could not be drawn (MSG-8): the box round its walls, tinted and dashed, with its
    name and why in the middle. */
 .canvas [data-part='undrawn-room'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   fill-opacity: 0.1;
-  stroke: var(--plan-warning, #b4531a);
+  stroke: var(--plan-warning, #a14a17);
   stroke-width: 1.5;
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
@@ -225,7 +243,7 @@
 }
 
 .canvas [data-part='undrawn-reason'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   font-family: var(--font-sans);
   font-size: 12px;
   text-anchor: middle;
@@ -235,7 +253,7 @@
 
 /* A numbered mark on the part a line of the result is about, its words beside it (MSG-8). */
 .canvas [data-part='fault-mark-dot'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   stroke: var(--plan-paper, #ffffff);
   stroke-width: 1.5;
 }
@@ -254,7 +272,7 @@
 }
 
 .canvas [data-part='fault-mark-text'] {
-  fill: var(--plan-warning, #b4531a);
+  fill: var(--plan-warning, #a14a17);
   font-family: var(--font-sans);
   font-size: 12px;
   pointer-events: none;
@@ -263,14 +281,14 @@
 
 /* `[data-part]` matches the gap rule above in weight, so being later wins over its `stroke: none`. */
 .canvas [data-part][data-hit='true'] {
-  stroke: var(--plan-warning, #b4531a);
+  stroke: var(--plan-warning, #a14a17);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 /* A fixture is a group of paths that carry their own ink (CNT-13): light the paths. */
 .canvas [data-part='fixture'][data-hit='true'] > path {
-  stroke: var(--plan-warning, #b4531a);
+  stroke: var(--plan-warning, #a14a17);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
@@ -285,7 +303,7 @@
 }
 
 .canvas [data-part='area'] {
-  fill: var(--plan-label-soft, #75726a);
+  fill: var(--plan-label-soft, #66635c);
   font-family: var(--font-sans);
   font-size: 11px;
   text-anchor: middle;
@@ -294,7 +312,7 @@
 }
 
 .canvas [data-part='label-leader'] {
-  stroke: var(--plan-label-soft, #75726a);
+  stroke: var(--plan-label-soft, #66635c);
   stroke-width: 0.75;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -348,12 +366,12 @@
 /* Room dimensions are guidance inside the room, so they read lighter than the
    overall ones, which are the drawing's headline measurements. */
 .canvas [data-kind='room'] [data-part='dimension-line'] {
-  stroke: var(--plan-dimension-soft, #a9a598);
+  stroke: var(--plan-dimension-soft, #817e75);
   stroke-dasharray: 3 3;
 }
 
 .canvas [data-kind='room'] [data-part='dimension-text'] {
-  fill: var(--plan-dimension-soft-text, #75726a);
+  fill: var(--plan-dimension-soft-text, #66635c);
   font-size: 10px;
 }
 
