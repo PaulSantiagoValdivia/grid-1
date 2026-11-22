@@ -33,8 +33,8 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
 | `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall); and the plot: how far the building stands from each edge of the site's boundary against the set-back the person asked for, each face's distance to the edge in front of it, and the plot coverage |
-| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), a facade (`kind=facade` with `side`: one side of the drawing in elevation, every floor at its level, as `grid draw --facade`, with the walls, openings and levels it shows in `facade`), the model through a camera you set (a side or corner, or a bearing from the plan's north, with tilt, distance, eye height, lens and a room to point at), a saved view by name, or an eye-level view in a room with the window sills against the eye; every 3D picture with its camera record ([below](#a-camera-you-can-set-and-saved-views)) |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall); the plot: how far the building stands from each edge of the site's boundary against the set-back the person asked for, each face's distance to the edge in front of it, and the plot coverage; and the accessibility measurements, as numbers (each door's clear width, each corridor's narrowest point, turning space, and the steps on the way in from the entrance) |
+| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), a facade (`kind=facade` with `side`: one side of the drawing in elevation, every floor at its level, as `grid draw --facade`, with the walls, openings and levels it shows in `facade`), the model through a camera you set (a side or corner, or a bearing from the plan's north, with tilt, distance, eye height, lens and a room to point at), a saved view by name, or an eye-level view in a room with the window sills against the eye; every 3D picture with its camera record ([below](#a-camera-you-can-set-and-saved-views)); or with `kind` `section` a section along a line through every floor (`cut`, `toward`), its levels, room heights and what Grid takes hatched and listed in the picture, the text and `section` (LVL-9); a plan takes `marks` (`levels`, `elevations`, `section`) to mark them, as `grid draw --marks` |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules", then the place the figures were for (the plan's `site.country`, or `country`; with none, no figure is applied); the notes the person set aside are listed under Seen |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
@@ -250,6 +250,42 @@ room. A room bigger than `useRasterCells` points is measured on a coarser grid. 
 names a door whose leaf swings into a fixture (`opening/door-hits-item`, with the fixture's
 label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
 front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
+
+## Accessibility measurements, as numbers
+
+Read this when the person asks whether they can get in and round the plan with a wheelchair, a
+walker or a pram: how wide the doors are, how narrow the hall gets, whether they can turn, and
+whether there is a step. `grid_measure what=access` (CNT-17) measures the rooms and routes the
+plan marks as needing to be accessible ([`accessible`](plan-file.md#what-needs-to-be-accessible)),
+or every room when it marks none, and says which. It takes only `plan`, `units` and `decimal`.
+
+| What it lists | From | In the data |
+|---|---|---|
+| Every door and doorless opening of a room measured, or on a way: the hole in the wall, the clear width past an open leaf (less `useOpenLeaf`, 0.05 m, and any fixture in front of it), and its sill when it stands above the floor | CNT-13's `doorwayClearance` | `doors`: `id`, `type`, `between`, `hole`, `leaf`, `clear`, `sill`, `entrance`, `against` |
+| Each room used as a corridor, at its narrowest from end to end (its two ends are the sides of its outline no wider than it, farthest apart); its widest circle when Grid finds no two ends | CNT-13's `passageWidth` | `corridors`: `room`, `narrowest`, `at`, `widest`, `against` |
+| Each room's turning space: the widest circle its free floor holds | CNT-13's `turningSpace` | `turning`: `room`, `diameter`, `at`, `against` |
+| The way in from the entrance to each room marked (and each route marked), room by room, with every step on it and its height: a door's sill, a change of level between rooms (LVL-7), the ground outside when the site states its level (LVL-4), and the risers of a stair; between floors a lift where one joins them, else a stair (LVL-3) | the way-out check's ways, `planSteps`, `groundLevel`, `floorJoins` | `ways`: `from`, `to`, `entrance`, `found`, `legs`, `joins`, `steps` (`kind`, `at`, `height`, `count`, `up`), `narrowest`, `cannotTell` |
+
+The entrance is the front door the plan names (`front.opening`) when it leads outside, else
+every door out of the ground floor. Where Grid cannot tell, the answer says so: the step from
+the ground when the site states no ground level, the steps of a stair drawn only as rooms, a
+floor no stair or lift joins. It ends with what it did not look at (`notLookedAt`): door leaves
+and handles, thresholds other than a sill, ramps (the plan cannot state one), inside a lift,
+fittings the plan does not hold, surfaces and heights of controls, the way outside, and whether
+any number is enough.
+
+A number is set against a figure (`against`, each `{ figure, short }`) only when the figure is
+the person's own, from the brief beside the plan ([brief.md](brief.md): `door_width`,
+`corridor_width`, `turning_circle` with its rooms, `step`), and every such line says "your
+figure" (`figure.from: "yours"`, `figure.label: "your figure"`); or a figure from a code that a
+named person has confirmed against its source (`confirmedFigure` in `@ongrid/rules`: status
+`checked-once` or `checked-twice`, each check by a person, for the place the plan states and the
+kind of building it was read for). No figure Grid holds is confirmed yet, so today none is used
+and the answer says so. A door's width is set against the person's `door_width` by its clear
+width, not its hole. No line says a room, a route or the plan is accessible.
+
+`grid_check` gives a plan that marks anything one line, `plan/not-checked-access`: what is
+marked was not checked, since Grid holds no figure for it that a named person has confirmed.
 
 ## Which rooms get the sun: a table of geometry
 

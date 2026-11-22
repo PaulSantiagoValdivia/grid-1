@@ -21,6 +21,7 @@ import { floorSpaces, spacesKnown } from '../spaces'
 import { wallFaults } from '../wallFaults'
 import { wallRevision } from '../revision'
 import { diffPlans, PLAN_TURNS, turnPlan } from '../diff'
+import { planSection } from '../section'
 import { planFacing } from '../orientation'
 import { doorSwing } from '../door'
 import { validateDoorSweeps } from '../sweep'
@@ -72,7 +73,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C14)', () => {
+describe('a curved wall in the plan file (C15)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -449,5 +450,26 @@ describe('a curved wall turned or mirrored for a comparison (WRT-4)', () => {
   it.each(PLAN_TURNS)('%s keeps every curved wall on its circle', (id) => {
     const turned = turnPlan(bayRoom(), id)
     for (const w of turned.walls.filter((x) => x.arc !== undefined)) expect(curveFault(w), `${id} ${w.id}`).toBeNull()
+  })
+})
+
+describe('a section through a curved wall (CNT-17 with CNT-18)', () => {
+  it('cuts the bay where the line crosses it, and faces it beyond, piece by piece', () => {
+    // Up the middle of the room: through the south wall and the top of the bay at (2, 5).
+    const section = planSection(bayRoom(), { from: { x: 2, y: -1 }, to: { x: 2, y: 6 }, toward: 'right' })
+    const bay = section.parts.find((p) => p.kind === 'wall' && p.id === 'bay')
+    expect(bay).toBeDefined()
+    const across = (id: string): [number, number] => {
+      const xs = section.parts.find((p) => p.kind === 'wall' && p.id === id)!.rings[0]!.map((p) => p.x)
+      return [Math.min(...xs), Math.max(...xs)]
+    }
+    const [b0, b1] = across('bay')
+    const [s0, s1] = across('s')
+    // The bay's axis crosses the line at y = 5, 5 m from the south wall's at y = 0, and the cut
+    // is its 0.2 m thickness; through its window, so a sill below and a lintel above.
+    expect(Math.abs((b0 + b1) / 2 - (s0 + s1) / 2)).toBeCloseTo(5, 2)
+    expect(b1 - b0).toBeCloseTo(0.2, 2)
+    expect(bay!.rings).toHaveLength(2)
+    expect(section.beyond.filter((f) => f.id === 'bay').length).toBeGreaterThan(2)
   })
 })

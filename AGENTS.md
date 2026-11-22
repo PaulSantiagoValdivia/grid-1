@@ -22,7 +22,7 @@ Notes for agents and people changing this repository.
   carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match
   it, and no measuring standard is named anywhere but in a figure record (a test checks both).
   The CLI's `quantities/areas.ts` adds room sizes, free floor, circulation and each figure's state.
-- `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C14, `arc` in the schema):
+- `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C15, `arc` in the schema):
   its curve worked out from its centre and sweep, its faults, and the stations straight pieces
   follow it by. Read a wall that may be curved through `wall.ts`: `wallLength`, `wallFrameAt`,
   `wallSegments` (its chords) and `wallSliceShape` (its faces as true arcs); `wallAxis` throws
@@ -104,6 +104,12 @@ Notes for agents and people changing this repository.
   `grid_measure` and writes it met or missed, never as a score, and `answer.ts` adds the lines to
   every change's answer and the one reminder on a first plan with no brief. `grid_write_brief`
   writes it; `docs/brief.md` is its page.
+- Accessibility measurements (CNT-17, `packages/cli/src/quantities/access.ts`, `grid_measure
+  what=access`): for the rooms and routes a plan marks (`accessible`, C14), or every room, each
+  door's clear width, each corridor's narrowest point, turning space and the steps on the way in,
+  from CNT-13's, LVL-3's, LVL-4's and LVL-7's measures. Numbers are set only against the brief's
+  figures, said as "your figure", and a code's once `confirmedFigure` (`packages/rules`) gives
+  one: a named person checked it. No line says a plan is accessible.
 - `grid diff` and `grid mark` (WRT-8, `packages/cli/src/versions/`, tools `grid_diff` and
   `grid_mark_start` in `src/mcp/diffTools.ts`): the plan against a start marker
   (`plan.markers.json` beside it, at most `MARKERS_MAX`) or its last commit, read from the

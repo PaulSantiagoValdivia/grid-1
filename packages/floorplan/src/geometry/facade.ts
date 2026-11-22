@@ -30,7 +30,7 @@
  * `outline` is the facade's silhouette above the ground. Stairs stand inside the building and are
  * not seen.
  *
- * Opening patterns (C12) are expanded first (`withPatterns`). A curved wall (C14) is seen by the
+ * Opening patterns (C12) are expanded first (`withPatterns`). A curved wall (C15) is seen by the
  * straight pieces the outline follows it by, each standing for the wall. Pure, and never throws.
  */
 

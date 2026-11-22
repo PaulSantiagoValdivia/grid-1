@@ -668,6 +668,24 @@ export const TOLERANCES = {
       'above. It only draws the plan; it judges nothing.',
     basis: own
   },
+  sectionGroundRun: {
+    kind: 'limit',
+    value: 1,
+    unit: 'm',
+    decides:
+      'How far the ground line of a section runs past the building on each side (LVL-9). It only ' +
+      'draws the section; it judges nothing.',
+    basis: own
+  },
+  elevationMarkOffset: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9). ' +
+      'It only draws the mark; it judges nothing.',
+    basis: own
+  },
   aboveSameEdge: {
     kind: 'tolerance',
     value: 0.02,

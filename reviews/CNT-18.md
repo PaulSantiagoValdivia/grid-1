@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C14 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C15 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -252,6 +252,16 @@ room is measured as before.
   quantities, edit, describe, the commands' tests, sheet, versions, the viewer and
   `scoreboard/__tests__`: 263 of 263 files passed, 4,719 tests, 4 skipped.
 
+- After merging `main` at e486ccba (CNT-17): four conflicts, both sides kept (`CHANGELOG.md`,
+  `docs/result-contract.md`, the bundle line in `grid.e2e.test.ts`, now under CNT-17's 600 kB
+  cap, and `types/floorplan.ts`). CNT-17 took convention C14, so the curved wall is C15 now.
+  CNT-17's sections (`geometry/section.ts`) took every cut wall's straight axis, so a section
+  through a curved wall would have thrown: the cut now finds the chord of the curve the line
+  crosses, and the faces beyond are drawn piece by piece along the chords, the openings open
+  where they stand on the curve, with end faces only where the wall ends. A test cuts the bay
+  through its window. CNT-17's accessibility measurements read CNT-13's, which already took the
+  curve.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -263,7 +273,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C14) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C15) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |
