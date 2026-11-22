@@ -113,6 +113,41 @@ with the element's kind, floor and id, so a re-export is recognised as the same 
 the plan file is called; keep those ids stable. A plan with no `projectId` falls back to the
 plan file's name.
 
+### What an export leaves out (HND-6)
+
+An export holds what the views draw, and leaves out the parts validation says cannot be drawn:
+a zero-length wall, the rooms and openings that rest on it, an opening on a wall whose id is
+used on several floors. It leaves out the parts the reader left out too (MSG-6): an id used
+twice, a value a part cannot do without. Each file says so, and so does the command:
+
+- On standard error, one line: how many parts, of which kinds, the first few by id (or by their
+  place in the file, `openings[4]`, when the reader could not read the id), and that
+  `grid check` says why.
+- In the file, only when something was left out, so the file of a sound plan is as it was:
+  - IFC: the property set `Grid_LeftOut` on the building, with `Parts` (how many), `Note` (in
+    words), and for each kind a count and its ids (`Openings`, `OpeningIds`, `Rooms`, `RoomIds`,
+    `Walls`, `WallIds`, `Fixtures`, `FixtureIds`, `Floors`, `FloorIds`).
+  - DXF: the layer `GRID-LEFT-OUT`, with the same note as text under the drawing: a line that
+    says how many, then a line or more per kind with the ids.
+  - OBJ: the same note as comment lines after the header.
+  - GLB: `asset.extras.gridLeftOut`, with `count`, `note` and `parts` (each part as the tool
+    server's receipt gives it).
+- An id that several parts share is named once, with how many (`"bath" 4 times`).
+
+DXF, OBJ and GLB hold one floor: they name what is left out of that floor, every opening no
+floor holds, and every part the reader left out, which Grid cannot place on a floor. The IFC
+names what is left out of every floor.
+
+The views validate each floor on its own, so a wall id written on two floors is drawn and
+exported on each, while `grid check`, which validates the whole plan, says the id is used twice
+(`plan/duplicate-id`). The export names what its file leaves out, not every line `grid check`
+gives.
+
+An export that would hold nothing of the plan (no wall, room or fixture that can be drawn, on
+the floor asked for) is refused with exit code 1, and no file is written: `Nothing to export:
+plan.json has no wall, room or fixture that can be drawn.` It names what is left out, when
+anything is.
+
 ## Describing a plan: `grid describe`
 
 `grid describe` is a short account of the plan, for an agent to check its own work without
