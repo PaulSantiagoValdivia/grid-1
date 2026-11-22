@@ -123,6 +123,15 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ]
         }
       }
+      case 'stair_shifted':
+      case 'lift_shifted': {
+        // LVL-5: the finding's own sentence says where and by how much.
+        return {
+          ...base,
+          title: [words(finding.message)],
+          detail: [words('If it is meant, mark the room with overhang "meant". Otherwise move it back over the one below.')]
+        }
+      }
       case 'opening_below_ground': {
         const opening = plan.openings.find((o) => o.id === finding.openings[0])
         const wall = opening?.wall ?? finding.openings[0] ?? ''

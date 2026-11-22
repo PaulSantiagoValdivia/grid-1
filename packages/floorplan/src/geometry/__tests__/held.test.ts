@@ -94,7 +94,9 @@ describe('an opening that could be placed on no wall', () => {
     const report = checkPlanSanity(misspelt())
     expect(report.findings).toEqual([])
     expect(report.notChecked).toMatchObject([{ reason: 'cannot_be_drawn', rooms: [], openings: ['front'] }])
-    expect(report.notChecked[0]!.message).toBe('On "Ground floor", these doors or windows could not be drawn, so they and what rests on them were not checked: "front"')
+    // LVL-5 (lab A-16): the door is called a door, by its type.
+    expect(report.notChecked[0]!.message).toBe('On "Ground floor", this door could not be drawn, so it and what rests on it were not checked: "front"')
+    expect(report.notChecked[0]!.openingKinds).toEqual(['door'])
     expect(held(misspelt())).toEqual(['no_exit  <- front'])
   })
 })

@@ -180,7 +180,8 @@ describe('words Grid does not read (MSG-4)', () => {
       also: [],
       message: `Wall "${walls[0]}" has a field Grid does not know, "thick"`,
       found: '"thick" at walls[0], which Grid does not read; the nearest field it knows is "thickness"',
-      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, properties',
+      // LVL-5: a wall's fields now hold through, the highest floor it rises through.
+      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, through, properties',
       fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.'
     })
   })

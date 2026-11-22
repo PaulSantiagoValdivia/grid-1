@@ -217,6 +217,7 @@ label.
 | `wall/crosses-room` | {thing} runs across a room that does not list it | every wall across a room listed by the rooms on its sides |
 | `wall/stands-in-room` | {thing} stands inside a room that does not list it | a wall inside a room drawn as part of a room |
 | `wall/above-storey` | {thing} is higher than the storey its floor states | walls no higher than their floor's stated height |
+| `wall/through-floor` | {thing} rises through a floor that is not above its own, so it stands on its own floor only | through naming a floor above the wall's own, from the plan's floors |
 | `opening/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `opening/broken-wall` | {thing} is on a wall that cannot be drawn | a wall that can be drawn |
 | `opening/missing-wall` | {thing} is on a wall that is not in the plan | the id of a wall in the plan |
@@ -237,7 +238,7 @@ label.
 | `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
 | `opening/window-between-rooms` | {thing} has rooms on both sides | a window in a wall with the outside on one side, unless it is a borrowed light |
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
-| `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
+| `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists standing on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
 | `room/empty` | {thing} encloses no floor | walls that enclose some floor |
 | `room/unclosed` | {thing} cannot be closed from the walls it lists | at least three walls in the plan, each meeting the next, round the room |
@@ -280,6 +281,7 @@ label.
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/out-of-line` | {thing} does not line up with the floor below it | a floor's outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose |
 | `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
 | `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -296,6 +298,8 @@ label.
 | `plan/over-boundary` | The building reaches {distance} m over the {east} boundary, out of the plot | the building inside the plot's boundary |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
+| `room/stair-shifted` | The stair "{name}" on "{floor}" is {1.20 m east} of "{room}" on "{floor}" below it: it stands from {(x, y) to (x, y)}, the one below from {(x, y) to (x, y)} | the stair room over the one on the floor below, or marked overhang "meant" where it is moved on purpose |
+| `room/lift-shifted` | The lift shaft "{name}" on "{floor}" is {0.60 m north} of "{room}" on "{floor}" below it: it stands from {(x, y) to (x, y)}, the one below from {(x, y) to (x, y)} | the shaft over the one on the floor below, or marked overhang "meant" where it is moved on purpose |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
 | `room/too-small` | "{name}" is under {minimum} m² | the figure used here, at least {minimum} m² ({basis}, status {status}); this check's figures were read for {kinds} |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
@@ -304,7 +308,7 @@ label.
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
-| `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
+| `floor/not-checked-doors-not-drawn` | On "{floor}", {this window, these doors, these doors and windows} could not be drawn, so {it, they} and what rests on {it, them} were not checked: "{id}", … | {a window, doors, doors and windows} that can be drawn |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {place} | figures for the place, looked up and given to the check |
@@ -596,6 +600,32 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: walls through floors, and floors that line up (LVL-5)
+
+- The plan format takes a wall's `through` (C15): the highest floor it rises through. A room on
+  any floor it stands on may list it, so `room/cross-floor` is no longer given for such a wall.
+  An opening in it may reach as high as the wall rises, measured from the wall's own floor, so
+  `opening/too-tall` compares with that height; openings one over the other in it are not
+  `opening/overlap`. `plan/unknown-field`'s list of a wall's fields now names `through` after
+  `floor`.
+- A floor and a room take `overhang: "meant"`: the floor's outline, or the stair room or lift
+  shaft, does not line up with the floor below on purpose.
+- New codes: `wall/through-floor` (`worth-a-look`): `through` names a floor the plan does not have
+  or one not above the wall's own, and the wall stands on its own floor only.
+  `floor/out-of-line` (`worth-a-look`): a floor's outline reaches past the floor below, or sits back
+  from it, by more than `stackShift` (0.05 m); its message names the side, how far and the box of
+  each stretch, up to three, then how many more. `room/stair-shifted` and `room/lift-shifted`
+  (`finding`, under the check `stairs-line-up`): a stair room or lift shaft that joins the one below
+  but is moved from it; the finding carries `shift` (`east`, `north`, in metres, `sides` for a shaft
+  not moved as a whole, and the `upper` and `lower` boxes), and its message says which way, how far
+  and where both stand. None is given for a floor or room marked `overhang: "meant"`.
+- Wording changed: `floor/not-checked-doors-not-drawn` names its openings by their type ("this
+  window could not be drawn, so it and what rests on it were not checked: …", "these doors and
+  windows …"), and so do its `found`, `needed` and `fix`; the notice carries `openingKinds`. It no
+  longer calls a window "doors or windows" (lab A-16). `room/cross-floor`'s `needed` and `fix`
+  mention a wall that rises through floors.
+- `resultVersion` stays 1.
 
 ### 2026-11-22: accessibility measurements, as numbers (CNT-17)
 

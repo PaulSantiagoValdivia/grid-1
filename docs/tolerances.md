@@ -85,6 +85,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
+| `stackShift` | tolerance | 0.05 m | A floor whose outline reaches past the floor below it, or sits back from it, by more than this does not line up with it (`floor/out-of-line`), nor does a stair room or a lift shaft moved by more than this from the one below (`room/stair-shifted`, `room/lift-shifted`), unless the plan marks it as meant (LVL-5) |
 | `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
 | `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
 | `sectionGroundRun` | limit | 1 m | How far the ground line of a section runs past the building on each side (LVL-9) |

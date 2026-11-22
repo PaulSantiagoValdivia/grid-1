@@ -59,6 +59,14 @@ export type FindingCode =
   /** LVL-3: the same for rooms used as a lift: the shaft is out of line. */
   | 'lift_out_of_line'
   /**
+   * LVL-5 (lab WR-9): a room used as a stair that lies over one on the floor below, enough to join
+   * it, but moved from it by more than `stackShift`, and not marked `overhang: "meant"`. On the
+   * upper floor; its rooms are the upper room, then the lower.
+   */
+  | 'stair_shifted'
+  /** LVL-5: the same for a lift shaft. */
+  | 'lift_shifted'
+  /**
    * MSG-18: a door or doorless opening no person fits through, by Grid's own sizes (not code
    * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
    */
@@ -139,6 +147,19 @@ export interface RuleFinding {
     readonly asked: { readonly distance: number; readonly from: 'edge' | 'street' | 'all'; readonly source: 'given' | 'assumed' | null } | null
     readonly northStated: boolean
   }
+  /**
+   * Only on `stair_shifted` and `lift_shifted` (LVL-5): how far the upper room is moved from the
+   * one below, east (+x) and north (+y) of the drawing, in m; for a shaft not moved as a whole,
+   * each side that stands off the one below's (east or north positive); and the box of each on the
+   * plan. Optional, like `through`.
+   */
+  readonly shift?: {
+    readonly east: number
+    readonly north: number
+    readonly sides: readonly { readonly side: 'north' | 'east' | 'south' | 'west'; readonly by: number }[]
+    readonly upper: { readonly min: readonly [number, number]; readonly max: readonly [number, number] }
+    readonly lower: { readonly min: readonly [number, number]; readonly max: readonly [number, number] }
+  }
 }
 
 export type NotCheckedReason =
@@ -173,6 +194,11 @@ export interface NotChecked {
    * back once those parts are drawn, if it still holds. Optional, like `through`.
    */
   readonly held?: readonly HeldFinding[]
+  /**
+   * LVL-5, only on `cannot_be_drawn`: the type of each of `openings`, in order, so a window is
+   * worded as what it is, never as a door. Optional, like `through`.
+   */
+  readonly openingKinds?: readonly ('door' | 'window' | 'opening')[]
 }
 
 /** MSG-5: a finding held back, and the rooms and openings that could not be drawn that it waits for, by id. */

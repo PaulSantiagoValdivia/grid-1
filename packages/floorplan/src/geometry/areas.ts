@@ -28,7 +28,7 @@ import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { roomFloorArea, tryRoomPolygon } from './room'
 import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
@@ -223,9 +223,9 @@ const nameOf = (room: Room): string => (room.name.trim() === '' ? room.id : room
 
 /** The walls `floorSpaces` joins on this floor, in plan order. */
 export function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
-  return plan.walls.filter(
+  // LVL-5: a wall through floors is one of each floor's it stands on.
+  return wallsOnFloor(plan, floor).filter(
     (wall) =>
-      floorOf(wall) === floor &&
       !broken.has(wall.id) &&
       (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
       (wall.virtual === true || wall.thickness > 0)

@@ -20,7 +20,8 @@
     "./rooms": "./src/rooms/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",
     "./test-support/facts": "./src/test-support/facts.ts",
-    "./test-support/lab": "./src/test-support/lab.ts"
+    "./test-support/lab": "./src/test-support/lab.ts",
+    "./test-support/through": "./src/test-support/through.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
