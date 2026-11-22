@@ -287,3 +287,47 @@ exit 0, with no type errors. `vitest run packages/floorplan/src packages/rules p
 --maxWorkers=2 --minWorkers=1`: Test Files 191 passed (191), Tests 4333 passed | 2 skipped
 (4335); none failed, on timing or otherwise. The scoreboard and the full suite were not run for
 this merge.
+
+## After merging main (bd2f6a7, WRT-6 and HND-2)
+
+Main had gained WRT-6 (marks on what was given or assumed, and `grid_areas`' `sureness`, an area
+from scanned walls given as ± m² and %) and HND-2 (IFC spaces with a number, a use, an area and
+base quantities, numbered by `roomNumbers`, which the room schedule reads too). The merge commit
+resolves five conflicted files, keeping both sides in each; the changes beyond them are in the
+follow-up commit.
+
+- `docs/result-contract.md`: both changelog sections, CNT-8's on top, then WRT-6's. The code rows
+  of both merged cleanly.
+- `packages/cli/src/describe/facts.ts`: a floor's area counts no zone (CNT-8), and its wall
+  height is WRT-6's `usualHeight` (stated heights first).
+- `packages/cli/src/mcp/readTools.ts`: a room's line in `grid_areas`' text has WRT-6's band, then
+  "outside", CNT-8's zone note and SHT-11's stair note.
+- `packages/cli/src/quantities/areas.ts`: `RoomArea` has both `zoneOf` and `sureness`.
+- `packages/cli/src/quantities/schedule.ts`: rows take HND-2's numbers from `roomNumbers`, list no
+  zone as a row, and keep CNT-8's `zones` under their room; a floor counts its rooms only.
+
+Changed beyond the marked conflicts, so a zone is counted once in both:
+
+- `packages/cli/src/quantities/areas.ts`: the plan's `sureness` added up every room not outside,
+  zones among them, so a scanned studio with zones had a wider band than without. It now adds up
+  the rooms the net counts (`inTotals`: no outside room, no zone, no stair room counted with the
+  one below), as the floor's band already did. That also leaves out SHT-11's stair room over
+  the stair below, which main's sum counted twice too.
+- `packages/floorplan/src/geometry/roomNumbers.ts`: a zone gets no number. Before, it was numbered
+  with the rooms, so the IFC's space numbers and the schedule's row numbers skipped numbers and
+  moved for every room after a zone. Zones are found per floor (`roomZones` on the floor's own
+  index, as the IFC finds them), and only on a plan with a room that states `partOf`. The IFC
+  already wrote no space for a zone, so it writes one space, the room's.
+- `docs/result-contract.md`: CNT-8's changelog section gains a paragraph on zones with WRT-6
+  and HND-2.
+- New tests: "zones in HND-2's IFC spaces and room numbers (CNT-8)" in
+  `packages/floorplan/src/geometry/__tests__/zones.test.ts` (the lab's studio with zones gives
+  the same `roomNumbers`, and the same IFC spaces, field by field with every property and
+  quantity, as the studio drawn as one room) and
+  `packages/cli/src/quantities/__tests__/zones.test.ts` (the studio's walls and dividing lines
+  marked scanned: the same `sureness` on each room, the floor and the plan, the same net, and
+  the same schedule numbers). Each fails without its change.
+
+For the owner: a zone keeps a band of its own in `grid_areas` (from the walls and dividing lines
+round it), shown on its line, and added into no total. A zone can be marked assumed like any
+part, and is listed to confirm.

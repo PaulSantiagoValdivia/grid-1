@@ -176,6 +176,9 @@ function sumSureness(rooms: readonly RoomArea[], total: number): AreaSureness | 
   const source = sure.some((room) => room.sureness!.source === 'scanned') ? 'scanned' : sure[0]!.sureness!.source
   return { source, plusMinus, percent: plusMinus === null || total <= 0 ? null : (100 * plusMinus) / total }
 }
+/** The rooms the totals count: no outside room, no zone (CNT-8), no stair room counted with the one below (SHT-11). */
+const inTotals = (room: RoomArea): boolean => !room.outside && room.zoneOf === undefined && room.countedWith === undefined
+
 const key = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
@@ -226,7 +229,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     })
     // CNT-8: a zone is in no total; its floor is counted in its room's, by the zone's use.
     // SHT-11: nor is a stair room counted with the one below, nor the zones of such a room.
-    const inside = rooms.filter((room) => !room.outside && room.zoneOf === undefined && room.countedWith === undefined)
+    const inside = rooms.filter(inTotals)
     const zones = rooms.filter((room) => !room.outside && room.zoneOf !== undefined && inside.some((r) => r.id === room.zoneOf))
     const useOf = (room: RoomArea): string => room.use ?? (room.zoneOf === undefined ? null : rooms.find((r) => r.id === room.zoneOf)?.use) ?? NOT_SAID
     const byUseState: Record<string, AreaState> = {}
@@ -289,7 +292,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   for (const stair of survey.facts.connections.stairs) {
     notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
   }
-  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter((room) => !room.outside)), net)
+  // WRT-6: the plan's band adds up the rooms its net counts, so no zone's band (CNT-8) and no
+  // stair room's counted with the one below (SHT-11) is added twice.
+  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter(inTotals)), net)
   return {
     floors,
     net,

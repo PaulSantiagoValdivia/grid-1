@@ -12,6 +12,9 @@ import { floorGraph, openingSides, roomOutlines } from '../rules/graph'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { validatePlan } from '../validate'
 import { roomZones } from '../zones'
+import { roomNumbers } from '../roomNumbers'
+import { toIfc } from '../export/ifc'
+import { entity, ofType, parseDoc, ref, refs, str, type Doc, type Value } from '../export/__tests__/step-reader'
 
 /**
  * CNT-8 (lab EL-13, A-22): zones inside one room. The lab's studio is a 5.0 × 5.0 m room inside
@@ -136,6 +139,42 @@ describe('zones inside one room (CNT-8)', () => {
     expect(lines(bath)[0]).toMatch(/^Room "bath" is marked as a zone of room "studio", but 3\.\d\d m² of it lies outside room "studio"/)
     expect(roomZones(indexPlan(bath)).zoneOf.has('bath')).toBe(false)
     expect(planAreaFigures(bath).floors[0]!.rooms.find((r) => r.id === 'bath')?.zoneOf).toBeNull()
+  })
+})
+
+/** The studio drawn as the one room, without its zones or their dividing lines. */
+function plainStudio(): FloorPlan {
+  const plan = labPlan('A/scenarios/studio.json')
+  const lines = [...roomZones(indexPlan(zonedStudio())).lines]
+  return { ...plan, walls: plan.walls.filter((w) => !lines.includes(w.id)), rooms: [STUDIO, ...plan.rooms.filter((r) => !ZONES.includes(r.id))] }
+}
+
+/** Each space of an IFC file by its GlobalId: its fields and every property and quantity on it. */
+function spacesOf(doc: Doc): Record<string, unknown> {
+  const value = (v: Value | undefined): unknown => (v?.t === 'typed' ? value(v.v) : v?.t === 'num' ? Number(v.v.toFixed(9)) : v?.t === 'str' || v?.t === 'enum' ? v.v : null)
+  const sets = new Map<number, Record<string, Record<string, unknown>>>()
+  for (const rel of ofType(doc, 'IFCRELDEFINESBYPROPERTIES')) {
+    const set = entity(doc, ref(rel.args[5]))
+    const parts = refs(set.type === 'IFCPROPERTYSET' ? set.args[4] : set.args[5]).map((id) => entity(doc, id))
+    const values = Object.fromEntries(parts.map((part) => [str(part.args[0]), value(part.args[part.type === 'IFCPROPERTYSINGLEVALUE' ? 2 : 3])]))
+    for (const id of refs(rel.args[4])) sets.set(id, { ...sets.get(id), [str(set.args[2])]: values })
+  }
+  return Object.fromEntries(ofType(doc, 'IFCSPACE').map((s) => [str(s.args[0]), { name: str(s.args[2]), use: value(s.args[4]), longName: str(s.args[7]), sets: sets.get(s.id) ?? {} }]))
+}
+
+describe('zones in HND-2\'s IFC spaces and room numbers (CNT-8)', () => {
+  const options = { projectId: 'zones', timestamp: new Date(0) }
+
+  it('numbers no zone, so the rooms keep the numbers they have without zones', () => {
+    expect(roomNumbers(zonedStudio())).toEqual(roomNumbers(plainStudio()))
+    expect(roomNumbers(zonedStudio()).map((n) => n.id)).toEqual(['bath', 'studio'])
+  })
+
+  it('gives a room with zones the same spaces, numbers, areas and quantities as the room without them', () => {
+    const [zoned, plain] = [spacesOf(parseDoc(toIfc(zonedStudio(), options))), spacesOf(parseDoc(toIfc(plainStudio(), options)))]
+    expect(Object.keys(zoned)).toHaveLength(2)
+    expect(zoned).toEqual(plain)
+    expect(Object.values(zoned).map((s) => (s as { name: string; longName: string }).longName + ' ' + (s as { name: string }).name).sort()).toEqual(['Shower room 1', 'Studio 2'])
   })
 })
 

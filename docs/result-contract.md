@@ -500,6 +500,10 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - With LVL-4 (merged from `main`): a zone has no ceiling, slab, void or opening of its own. In
   `grid_takeoff` its room's ceiling and the floor's `envelope` are the same as for the room drawn
   without zones, and a zone used as a stair or lift opens no slab.
+- With WRT-6 and HND-2 (merged from `main`): a zone's `sureness` in `grid_areas` is its own, and
+  is added into no floor's or plan's `sureness`, so those are the same as for the room drawn
+  without zones. In the IFC a zone has no space and no number (`roomNumbers` numbers rooms
+  only), so the room schedule and the spaces number every other room as without zones.
 
 ### 2026-11-22: what was given and what was assumed (WRT-6)
 
