@@ -144,3 +144,26 @@ See `MSG-2.md` in the shared notes. In short:
 - `npm run typecheck`: no errors.
 - `npm run lint`: no problems.
 - `npm run check:licenses`: 363 licences checked, none GPL, LGPL, AGPL, MPL or EPL.
+- `npx vitest run --exclude '.claude/**'`: the first full run, without a worker limit, was
+  stopped when the coordinator asked for `--maxWorkers=2`. Before that, a CLI-only run had three
+  timing tests fail under a load average of 171 (`grid check` under 0.5 s, a still of the flat,
+  the check view). All three pass when run alone. `--maxWorkers=2` alone stops at once on this
+  Vitest (2.1.9): it needs `--minWorkers=1` with it.
+- `npm run scoreboard`: the same as the stored figures (197, 386, 15, 2, 5; guards 727 and 95).
+
+## Merged with `main` at `fc78ff7` (MSG-18, CNT-12)
+
+- Conflicts:
+  - `docs/result-contract.md`: kept both changelog entries.
+  - `result/types.ts`: kept MSG-2's `NUMBER_STATES` and CNT-12's `item` thing.
+  - `quantities/areas.ts`: kept the states and CNT-12's fixtures. A room that cannot be measured
+    gets no `free` floor.
+  - `mcp/readTools.ts`: a room line in `grid_areas` shows the free floor and the state.
+- MSG-18 adds no check: `opening_too_small_to_pass` is a finding of `room-has-door`, which
+  already has its coverage.
+- After the merge:
+  - `npm run typecheck`: no errors.
+  - `npx vitest run packages/rules`: 340 passed.
+  - `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 201
+    files, 4,259 tests, all passed (1,318 s).
+  - `npm run scoreboard`: the same as the stored figures (197, 386, 15, 2, 5; guards 727 and 95).
