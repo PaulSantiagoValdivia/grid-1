@@ -3,6 +3,7 @@
  * and inches, with a decimal point or comma), and CSV for a spreadsheet. Grid's figures are
  * always metres; the display is only a way of writing them (WRT-7).
  */
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
 
 import { displayOf, METRES, showArea, showLength, type DecimalMark, type Display, type LengthKind } from '@ongrid/floorplan/types/units'
 
@@ -49,6 +50,10 @@ function csvField(value: string | number | null): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
+/**
+ * A table as CSV. Its first row is the label, in one cell (MSG-3), so a spreadsheet shows it
+ * above the table's own header.
+ */
 export function csv(header: readonly string[], rows: readonly (readonly (string | number | null)[])[]): string {
-  return [header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
+  return [[GENERAL_GUIDANCE_LABEL], header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
 }

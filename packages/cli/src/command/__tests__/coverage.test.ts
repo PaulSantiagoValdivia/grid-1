@@ -79,7 +79,7 @@ describe('every check says what it looked at (CH-1)', () => {
     expect(result.report.figures).toEqual([])
     const text = checkText(result, 1)
     expect(text).toContain('Looked at by at least one check: 7 of 7 rooms.')
-    expect(text).toContain('  - Rooms people live or sleep in have a minimum floor area: looked at no rooms; 0 findings.')
+    expect(text).toContain('  - Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
     expect(text).toContain('      not looked at, 7 rooms: the figure is for bedrooms, living rooms and dining rooms only: ')
     expect(text).toContain('      not looked at, 7 rooms: only bedrooms are checked: ')
   })
@@ -203,7 +203,8 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     expect(size.readFor).toEqual(['homes'])
     const text = checkText(result, 1)
     expect(text).toContain(`  - Rooms people live or sleep in have a minimum floor area: looked at 1 room; 0 findings; its figures were read for ${HOMES}.`)
-    expect(text).toContain(`habitableRoomMinArea 6.5 m², US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14, status ai-found, read for ${HOMES}`)
+    // MSG-3: given as the figure used here, with its basis, the kind of building, and its status.
+    expect(text).toContain(`is 6.5 m² (habitableRoomMinArea). Basis: US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14 for ${HOMES}. Status ai-found`)
   })
 
   it('a check that looked at nothing used no figure, and says nothing of one', () => {
@@ -215,7 +216,7 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     const result = checkPlan(plan(HOTEL), { country: 'US' })
     const sills = result.result.lines.filter((line) => line.code === 'room/escape-window-too-high')
     expect(sills).toHaveLength(12)
-    for (const line of sills) expect(line.needed).toBe(`a sill at most 1.118 m above the floor; this check's figures were read for ${HOMES}`)
+    for (const line of sills) expect(line.needed).toBe(`the figure used here, a sill at most 1.118 m above the floor (US model codes, IBC 2024 1031.3.3; IRC 2024 R319.2.3, status ai-found); this check's figures were read for ${HOMES}`)
     // Every line that used a figure says it; no other line does.
     for (const line of result.result.lines) {
       expect(line.needed.includes('were read for'), line.code).toBe(line.code.startsWith('room/escape-') || line.code === 'room/too-small')

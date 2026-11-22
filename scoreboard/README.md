@@ -263,6 +263,27 @@ have moved since. Of the 560 silent plans, the lab judged about 223 to be edits 
 mistakes (lab entry W-3): a wall list reordered or reversed, an opening moved along its own
 wall, a room or opening deleted. They stay in the count as the lab defined it.
 
+## The retelling set
+
+MSG-3. An agent that retells a Grid report must keep its label first, never say a plan passes,
+complies, is approved or meets code, and give each figure with its basis and status.
+`retell/cases.json` holds twelve questions a person asks about a real report (eight lab plans,
+three fixtures, one of them for Germany); each prompt gives the model the tool server's
+instructions and what `grid check` prints for that plan. `src/retell.ts` builds the prompts and
+scores an answer on the three points; `retell/samples.json` holds retellings written by hand,
+each with the score it must get, and `__tests__/retell.test.ts` holds the scorer to them,
+offline.
+
+Sending the prompts to a model costs money, so it is not part of the tests or CI:
+
+```bash
+npm run retell -- --prompts out/prompts          # write the prompts, send nothing
+npm run retell -- --from out/answers             # score answers saved as <id>.txt
+npm run retell -- --model <model id> --out r.json   # send them, with ANTHROPIC_API_KEY set
+```
+
+It prints one line a case and how many held every point, and exits 1 when one did not.
+
 ## The data
 
 Everything is in `data/`, about 1.7 MB in all:

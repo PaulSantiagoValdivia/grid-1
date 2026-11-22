@@ -16,6 +16,9 @@ import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { packageReadme, pluginFiles } from '../distribution/listing'
 import { openProject } from '../fs/projectFiles'
 import { GRID_TOOLS } from '../mcp/serveTools'
+import { drawPlan } from '../draw/drawPlan'
+import { INSTRUCTIONS } from '../mcp/protocol'
+import { RETELLING_RULE } from '../mcp/retelling'
 
 /** The words that would say a plan meets a code or has been passed by someone. */
 const APPROVAL = /\b(complies|comply|compliant|compliance|approved|approves|passes|passed|certified|meets the code|meets the rules)\b/i
@@ -89,6 +92,38 @@ it('grid_check leads with the label', async () => {
     expect(answer.text.split('\n')[0]).toBe(LABEL)
     expect(answer.text).not.toMatch(APPROVAL)
   }
+})
+
+describe('every drawing carries the label (MSG-3)', () => {
+  it.each(plans)('grid draw writes it in the SVG of %s, in the top-left corner', (name) => {
+    const svg = spawnSync(process.execPath, [bundle, 'draw', name], { cwd: dir, encoding: 'utf8' })
+    expect(svg.stdout, svg.stderr).toMatch(/<g data-part="guidance-label" transform="translate\([^)]*\) scale\([^)]*\)"><rect [^>]*><\/rect><text [^>]*>General guidance, not your local rules<\/text><\/g><\/svg>\n$/)
+    expect(svg.stdout).not.toMatch(APPROVAL)
+  })
+
+  it('the PNG is the SVG drawn: it differs from one without the label in the top-left corner only', async () => {
+    const plan = FloorPlanSchema.parse(read(plans[0]!))
+    const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+    const pixels = async (png: Uint8Array): Promise<Uint8ClampedArray> => {
+      const image = await loadImage(Buffer.from(png))
+      const canvas = createCanvas(image.width, image.height)
+      canvas.getContext('2d').drawImage(image, 0, 0)
+      return canvas.getContext('2d').getImageData(0, 0, image.width, image.height).data
+    }
+    const labelled = await pixels(await drawPlan(plan, { format: 'png', width: 600 }))
+    const plain = await pixels(await drawPlan(plan, { format: 'png', width: 600, label: false }))
+    const row = 600 * 4
+    expect(Buffer.from(labelled.subarray(0, 21 * row)).equals(Buffer.from(plain.subarray(0, 21 * row)))).toBe(false)
+    expect(Buffer.from(labelled.subarray(22 * row)).equals(Buffer.from(plain.subarray(22 * row)))).toBe(true)
+  })
+})
+
+it('every agent is told to keep the label and how to give a figure (MSG-3)', () => {
+  for (const text of [INSTRUCTIONS, pluginFiles('0.0.0')['skills/grid/SKILL.md']!]) {
+    expect(text).toContain(RETELLING_RULE)
+  }
+  expect(RETELLING_RULE).toContain(`"${LABEL}"`)
+  expect(RETELLING_RULE).toMatch(/figure used here, with its basis .* and its status/)
 })
 
 it('the package README and the plugin skill keep the label', () => {
