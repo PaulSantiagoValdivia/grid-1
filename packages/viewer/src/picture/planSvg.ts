@@ -21,10 +21,11 @@ import {
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
 import { doorHandingOf } from '../canvas2d/doorHanding'
+import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
-import type { PlanLook } from './look'
-import { DARK_LOOK, LIGHT_LOOK } from './look'
+import type { Look, LookName, PlanLook } from './look'
+import { LOOKS, toLook } from './look'
 import { planScene } from './scene'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -39,8 +40,18 @@ export interface PictureOptions {
    * width, so the plan fills the picture.
    */
   readonly height?: number
-  /** `light` (the default), `dark`, or colours of your own. */
-  readonly look?: 'light' | 'dark' | PlanLook
+  /**
+   * A named look (SHT-1): `working` (the default: the screen and every picture an agent gets),
+   * `technical` (black on white with lines in millimetres on paper, for sheets and files to hand
+   * on) or `dark`. `light` is the older name for `working`. Or a look, or colours, of your own.
+   */
+  readonly look?: LookName | 'light' | Look | PlanLook
+  /**
+   * N in the output scale 1:N, for a look whose lines are in millimetres on paper: its pen set
+   * and its line widths follow it. Left out, it is the picture's own, each pixel a CSS pixel
+   * (96 to the inch) on paper.
+   */
+  readonly paperScale?: number
   /** The overall and room dimensions. On by default. */
   readonly showDimensions?: boolean
   /** How the room tags read: capitals, room numbers, how the area is rounded. Plain by default. */
@@ -59,9 +70,14 @@ export interface Picture {
   readonly height: number
   /** What part of the plan it shows, in plan metres with y down. */
   readonly view: Viewport
-  readonly look: PlanLook
+  readonly look: Look
   /** How many rooms it draws, for the picture's description. */
   readonly rooms: number
+  /**
+   * The doors it draws with the "undecided" mark, by opening id: doors whose hinge or swing the
+   * plan does not state, in a look that marks them (`technical`). Empty in any other look.
+   */
+  readonly undecidedDoors: readonly string[]
   /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
   readonly nodes: readonly SvgNode[]
 }
@@ -99,15 +115,39 @@ export function warningMessages(
   return new Map([...warnings].map(([id, { messages }]) => [id, messages.join(' ')]))
 }
 
+function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHanding>): string[] {
+  return drawing.openings.filter((o) => o.type === 'door' && doorSymbolOf(o, handings.get(o.id)) === null).map((o) => o.id)
+}
+
+/**
+ * The doors on a floor whose hinge or swing the plan does not state, by opening id: the ones a
+ * look that marks them (`technical`) draws as undecided. Unset, or a floor the plan does not
+ * have, means its lowest floor.
+ */
+export function undecidedDoorsOf(plan: FloorPlan, floor?: string | null): string[] {
+  const slice = planForFloor(plan, resolveFloor(plan, floor))
+  return undecidedIn(buildFloorPlan(slice), handingsOf(slice))
+}
+
 /** What a plan view frames: the drawing and its dimensions, which sit outside the walls. */
 export function framingOf(drawing: PlanDrawing, dimensions: readonly Dimension[]): Bounds {
   return boundsWithDimensions(drawing, dimensions)
 }
 
-function lookOf(look: PictureOptions['look']): PlanLook {
-  if (look === undefined || look === 'light') return LIGHT_LOOK
-  if (look === 'dark') return DARK_LOOK
-  return look
+/** The look a picture is drawn in. */
+export function lookOf(look: PictureOptions['look']): Look {
+  if (look === undefined || look === 'light') return LOOKS.working
+  if (typeof look === 'string') {
+    const named = LOOKS[look]
+    if (!named) throw new RangeError(`Grid has no look called ${JSON.stringify(look)}: use working, technical or dark`)
+    return named
+  }
+  return toLook(look)
+}
+
+function paperScaleOption(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) throw new RangeError(`The paper scale is N in 1:N, a number above 0: got ${value}`)
+  return value
 }
 
 function pixels(name: string, value: number): number {
@@ -148,16 +188,19 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
   const { slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
   const look = lookOf(options.look)
+  const handings = handingsOf(slice)
   const nodes = planScene({
     drawing,
-    handings: handingsOf(slice),
+    handings,
     doorWarnings: warningMessages(doorWarningsOf(slice)),
     dimensions,
     metersPerPixel: view.width / width,
     look,
+    ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
     labels: options.labels
   })
-  return { width, height, view, look, rooms: drawing.rooms.length, nodes }
+  const undecidedDoors = look.undecidedDoors ? undecidedIn(drawing, handings) : []
+  return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes }
 }
 
 /**
@@ -172,7 +215,7 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
     y: view.y,
     width: view.width,
     height: view.height,
-    fill: look.paper
+    fill: look.colors.paper
   })
   const root = el(
     'svg',
