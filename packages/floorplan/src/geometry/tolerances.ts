@@ -330,6 +330,37 @@ export const TOLERANCES = {
     decides: 'And a removed room and an added one whose centres are closer than this may be the same.',
     basis: own
   },
+  diffPlace: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'When two versions are compared by what stands where (WRT-8): two walls whose ends are this ' +
+      'close, either way round, once the drawing is moved to its new origin, stand in the same ' +
+      'place, and so do two openings whose middles are this close. An opening has stayed where it ' +
+      'was in its room when it moved along its wall by less than this beyond the room itself.',
+    basis: own
+  },
+
+  // ── The brief beside the plan (BRF-1) ─────────────────────────────────────────────────────
+  briefAbout: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'ratio',
+    decides:
+      'A size the person asked for as a figure, not as at least or at most, is met when the drawn ' +
+      'size is within this share of it, above or below: asked 4.5 m², 4.3 to 4.7 m² is met.',
+    basis: own
+  },
+  nameSize: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'ratio',
+    decides:
+      'A size written in a room\'s name (12 m², 6 tatami) and the size drawn differ when they are ' +
+      'further apart than this share of the size named: a room named 6 mats that holds 5.8 does.',
+    basis: own
+  },
 
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {

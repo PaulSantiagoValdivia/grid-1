@@ -3,6 +3,9 @@ import { checkPlanSanity as checkPlan, type FloorPlan } from '@ongrid/floorplan/
 import { FIGURE_RULES, checkLocalRules } from '..'
 import { door, edit, flat, longWallStrip, madeVirtual, twoFloorHouse, withOpening, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
+/** COD-3: the place the figures here are for. With none stated, no figure applies. */
+const US = { country: 'US' } as const
+
 /**
  * The full check is the core's plan check with more in it: nothing the core reports is lost,
  * reworded or reordered, and what is added is only what the figure checks give.
@@ -48,7 +51,7 @@ const plans: [string, FloorPlan][] = [
 ]
 
 describe.each(plans)('the full report for %s', (_name, plan) => {
-  const full = checkLocalRules(plan)
+  const full = checkLocalRules(plan, US)
   const core = checkPlan(plan)
 
   it('keeps every plan-check finding, in the same order, adding only the cited figure', () => {
@@ -82,7 +85,7 @@ describe.each(plans)('the full report for %s', (_name, plan) => {
 
 describe('one call', () => {
   it('gives the findings of both kinds', () => {
-    const codes = checkLocalRules(withoutOpening(allBedrooms(flat()), 'd_hb')).findings.map((f) => f.code)
+    const codes = checkLocalRules(withoutOpening(allBedrooms(flat()), 'd_hb'), US).findings.map((f) => f.code)
     expect(codes).toContain('no_route_to_exit')
     expect(codes).toContain('no_escape_opening')
   })
@@ -90,7 +93,7 @@ describe('one call', () => {
   it('leaves the plan it was given untouched', () => {
     const plan = allBedrooms(twoFloorHouse())
     const before = JSON.stringify(plan)
-    checkLocalRules(plan)
+    checkLocalRules(plan, US)
     expect(JSON.stringify(plan)).toBe(before)
   })
 })

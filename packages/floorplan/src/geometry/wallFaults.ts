@@ -38,6 +38,7 @@ import { floorOf } from './floors'
 import type { RoomOutline } from './room'
 import { roomNesting, roomOutline } from './room'
 import { sitsWithin } from './nesting'
+import { roomZones } from './zones'
 import { tolerance } from './tolerances'
 import { areaText, metresText } from './rounding'
 import { quoted } from '../types/planText'
@@ -844,6 +845,7 @@ function splitAlong(ctx: Context, room: Room, s: Seg, stretch: [number, number])
 /** Walls in a room that does not list them: `crosses-room` and `stands-in-room`. */
 function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
   const nesting = roomNesting(ctx.index)
+  const zones = roomZones(ctx.index)
   for (const { room, outline } of ctx.traced) {
     if (outline.fault !== null) continue
     // The walls round its holes are its own too (ARE-6).
@@ -859,6 +861,8 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
       if (s.box.x0 > box.x1 || s.box.x1 < box.x0 || s.box.y0 > box.y1 || s.box.y1 < box.y0) continue
       // The walls of a room that sits inside this one stand in it by right (ARE-5).
       if (listing(ctx, s.wall.id).some((r) => r.id !== room.id && sitsWithin(nesting, r.id, room.id))) continue
+      // So do the dividing lines of its zones (CNT-8): they mark where a use is, not a wall.
+      if (s.wall.virtual === true && listing(ctx, s.wall.id).some((r) => zones.zoneOf.get(r.id) === room.id)) continue
       const stretches = insideStretches(s, polygon)
       const length = (list: readonly [number, number][]): number => list.reduce((sum, [d0, d1]) => sum + d1 - d0, 0)
       // What stands in a hole (ARE-6) stands in no part of the room: the holes lie inside the

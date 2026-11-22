@@ -9,9 +9,10 @@ import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { edit, flat, window_ } from '@ongrid/floorplan/test-support/plans'
 import { checkLocalRules, inspectPlan } from '../..'
 
-/** The flat with its bedroom used as one, and a window on the bedroom's outside wall. */
+/** The flat with its bedroom used as one, and a window on the bedroom's outside wall, in the US (COD-3: so the escape figures apply). */
 const bedroomFlat = () =>
   edit(flat(), (copy) => {
+    copy.site = { country: 'US' }
     copy.rooms.find((r) => r.id === 'bedroom')!.use = 'bedroom'
     copy.openings.push(window_('win_bed', 'n2', 1.5, 1.2))
   })

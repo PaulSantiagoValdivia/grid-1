@@ -65,10 +65,16 @@ describe('rooms', () => {
     expect(diffPlans(stated, withRoom(plan, 'r_left', { height: 2.4 + 1e-6 })).changes).toEqual([])
   })
 
-  it('reads the same boundary in another order as a change, because C3 gives it meaning', () => {
+  it('reads the same walls in another order as a change, because C3 gives it meaning', () => {
     const plan = twoRoomBox()
-    const next = withRoom(plan, 'r_left', { boundary: ['w_mid', 'w_n', 'w_w', 'w_s'] })
+    const next = withRoom(plan, 'r_left', { boundary: ['w_s', 'w_n', 'w_mid', 'w_w'] })
     expect(diffPlans(plan, next).changes[0]!.props.map((p) => p.key)).toEqual(['boundary'])
+  })
+
+  it('reads the same ring from another wall, or the other way round, as no change (WRT-8, lab U-4)', () => {
+    const plan = twoRoomBox()
+    expect(diffPlans(plan, withRoom(plan, 'r_left', { boundary: ['w_mid', 'w_n', 'w_w', 'w_s'] })).changes).toEqual([])
+    expect(diffPlans(plan, withRoom(plan, 'r_left', { boundary: ['w_w', 'w_n', 'w_mid', 'w_s'] })).changes).toEqual([])
   })
 })
 

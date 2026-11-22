@@ -118,7 +118,15 @@ export const CAPABILITIES = {
   'imperial-units': { what: 'shows sizes in feet and inches', probe: none },
   'marks-on-plan': { what: 'marks notes and changes on the drawing', probe: none },
   'note-reasons': { what: 'says why each note was given and what to change', probe: none },
-  'compare-notes': { what: 'compares the notes of two versions', probe: none },
+  'compare-notes': {
+    what: 'compares the notes of two versions',
+    // WRT-8: the comparison says which notes of the drawing check came and went.
+    probe: lib((s) => {
+      const plan = parseFloorPlan(s)
+      const note = { code: 'plan/probe', thing: { kind: 'plan', id: 'plan' }, also: [], message: 'A note' }
+      return geometry.compareBuildings(plan, plan, { notes: { before: [], after: [note] } }).issues.some((issue) => issue.code === 'note_added')
+    }),
+  },
   'layout-help': { what: 'works out a layout (how many flats fit)', probe: none },
   'repeat-floor': { what: 'repeats a floor', probe: none },
   'local-rules': { what: 'checks the rules of the place named', probe: none },

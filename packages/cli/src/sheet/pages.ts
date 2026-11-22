@@ -12,7 +12,7 @@ import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
-import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
+import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND, placeText } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
@@ -175,14 +175,17 @@ function undecidedNote(loaded: LoadedPlan, floor: string): string[] {
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
+  // CNT-8: a zone's floor is its room's, so the table has one row per room, and the column adds
+  // up to the net. The plan draws each zone with its name and area.
+  const places = floor.rooms.filter((r) => r.zoneOf === undefined)
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
-  const counted = floor.rooms.filter((r) => r.countedWith === undefined)
+  const counted = places.filter((r) => r.countedWith === undefined)
   const shown = sumText(counted.map((r) => r.net ?? 0), floor.net, 1)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
     heading: 'Rooms / m²',
     // MSG-2: a room that could not be measured has no area, never 0.
-    rows: floor.rooms.map((room) => ({
+    rows: places.map((room) => ({
       name: room.name,
       detail: withUse ? room.use : null,
       area: room.net === null ? 'not measured' : parts.get(room) ?? 'counted below',
@@ -285,6 +288,8 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
     figures, table: null, picture: null,
     notes: [
+      // COD-3: the place the figures were for, or that none was stated and no figure applied.
+      placeText(whole.report, { request: '--country', give: 'give --country to grid check' }),
       ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
       ...(areas.grossWhy === null ? [] : [areas.grossWhy]),

@@ -102,8 +102,8 @@ Run on a laptop shared with about ten other sessions, with `--maxWorkers=2 --min
 
 1. **Where the table lives: `grid_measure what=sun`**, not `grid_schedule of=windows` and not a
    new tool. It reads the same outside walls and north as `what=facing` and measures rooms as
-   `what=room` does, and a schedule is a list of parts by type and size, not of rooms. The tools
-   stay 26 and their order is unchanged. Moving it is a rename of one `what` value.
+   `what=room` does, and a schedule is a list of parts by type and size, not of rooms. No tool is
+   added and the order is unchanged. Moving it is a rename of one `what` value.
 2. **Eight points, not sixteen.** `faces` is one of the eight points `what=facing` already uses,
    so the two answers never name the same wall two ways; the bearing in degrees is beside it on
    every line for anyone who wants it finer. Sixteen would need a second compass list.
@@ -128,3 +128,7 @@ Run on a laptop shared with about ten other sessions, with `--maxWorkers=2 --min
 ## Not done or not verified
 
 - No CLI command answers it: `grid` has no `measure` command, and none was asked for.
+
+## After merging main at d058d4d
+
+BRF-1, WRT-8, CNT-8 and COD-3 conflicted in the docs only: `CHANGELOG.md`, the agents' changelog in `docs/result-contract.md` and `docs/tool-server.md`, each kept whole with BRF-5 first. Main now has 29 tools; BRF-5 adds none, and its lines no longer give a count.

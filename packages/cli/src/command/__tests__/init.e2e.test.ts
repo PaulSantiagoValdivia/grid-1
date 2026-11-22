@@ -281,7 +281,8 @@ describe('inside a project grid init made', () => {
     const other = JSON.parse(starterPlanText()) as { rooms: Array<{ use?: string }> }
     for (const room of other.rooms) delete room.use
     writeFileSync(join(demo, 'other.json'), JSON.stringify(other))
-    const run = grid(['check', 'other.json'], demo)
+    // COD-3: the US stated, so the room-size check's "no use stated" line is there to name.
+    const run = grid(['check', 'other.json', '--country', 'US'], demo)
     expect(run.status).toBe(0)
     expect(run.out).toContain('not checked, floor')
   })

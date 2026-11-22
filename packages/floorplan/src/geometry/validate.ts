@@ -40,6 +40,7 @@ import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { roomZones } from './zones'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -806,6 +807,27 @@ function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<
   }
 }
 
+/**
+ * Rooms that state `partOf` but are not zones of that room (CNT-8, `zones.ts`): it is not on
+ * their floor, is a zone itself, or does not hold them. They are counted as rooms of their own,
+ * which is what the plan said not to do.
+ */
+function validateZones(index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const fault of roomZones(index).faults) {
+    if (broken.has(fault.zone)) continue
+    issues.push(
+      issue(
+        'room',
+        fault.zone,
+        'room/zone-not-in-room',
+        `Room ${quoted(fault.zone)} is marked as a zone of room ${quoted(fault.room)}, but ${fault.why}. It is counted ` +
+          `as a room of its own. Draw it within the room it is part of, on the same floor, or leave out ${quoted('partOf')}.`,
+        'warning'
+      )
+    )
+  }
+}
+
 function overlapMessage(o: RoomOverlap): string {
   const [a, b] = o.rooms
   const [areaA, areaB] = o.areas
@@ -1114,6 +1136,7 @@ export function validatePlan(
     const spaces = validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
     traceItemRooms(plan, spaces, broken, options.leftOutParts ?? [], issues)
     validateNesting(plan, index, broken, issues)
+    validateZones(index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)
     // MSG-16: where each opening stands, against the walls that meet its wall.
