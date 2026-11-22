@@ -10,6 +10,7 @@ import { pulseAt } from '../preview/pulse'
 import { useReducedMotion } from '../preview/useReducedMotion'
 import { Slab3D } from './Slab3D'
 import { Stair3D } from './Stair3D'
+import { Opening3D } from './Opening3D'
 import { Shell3D } from './Shell3D'
 import { Divider3D } from './Divider3D'
 import { RoomMarker3D } from './RoomMarker3D'
@@ -184,6 +185,14 @@ export function Storey3D({
       ))}
       {scene.stairs.map((stair) => (
         <Stair3D key={`stair:${stair.id}`} stair={stair} color={palette.floor} castShadow={shadows} glow={glow} />
+      ))}
+      {scene.openings.map((opening) => (
+        <Opening3D
+          key={`opening:${opening.id}`}
+          opening={opening}
+          colors={{ frame: palette.wallExterior, leaf: palette.floor, glass: colors.background }}
+          glow={glow}
+        />
       ))}
       {scene.dividers.map((divider) => (
         <Divider3D key={`divider:${divider.wallId}`} divider={divider} color={colors.gridSection} />

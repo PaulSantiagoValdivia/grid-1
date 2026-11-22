@@ -31,6 +31,9 @@
  */
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
+import type { OpeningKind, WindowKind } from '../../types/floorplan'
+import { doorKindOf, statedKind } from '../openingKinds'
+import { openingParts } from '../openingParts'
 import { planFloors, planForFloor } from '../floors'
 import { sharedPart, wholeWall } from '../through'
 import { english, said } from '../../messages/say'
@@ -328,6 +331,8 @@ interface WallMaterials {
 /** Doors and windows of one type: the same kind, handing and size. */
 interface OpeningStyleEntry {
   readonly type: 'door' | 'window'
+  /** CNT-14: the kind the plan states, or null. */
+  readonly kind: OpeningKind | null
   readonly operation: DoorOperation | 'NOTDEFINED'
   readonly width: number
   readonly height: number
@@ -341,6 +346,8 @@ interface Context {
   readonly materials: WallMaterials
   /** Doors and windows by type (`openingStyleKey`), in the order they were first written. */
   readonly openingStyles: Map<string, OpeningStyleEntry>
+  /** CNT-14: the glass's surface style, written on first use. */
+  glassStyle: number | null
   /** Every room's number (ARE-12), by `floor`, NUL, `id`. */
   readonly roomNumbers: ReadonlyMap<string, RoomNumber>
   /** The GlobalId of an element of this context's floor, or of the building's. */
@@ -672,14 +679,37 @@ function extrusion(c: Context, profile: number, height: number): number {
   )
 }
 
-function bodyRepresentation(c: Context, solid: number, type: 'SweptSolid' | 'Clipping' = 'SweptSolid'): number {
+/** A body of one solid, or (CNT-14) of a door's or window's parts, swept or (LVL-6) clipped. */
+function bodyRepresentation(c: Context, solids: number | readonly number[], type: 'SweptSolid' | 'Clipping' = 'SweptSolid'): number {
   return c.w.add(
     'IFCSHAPEREPRESENTATION',
     ref(c.shared.bodyContext),
     str('Body'),
     str(type),
-    refs([solid])
+    refs(typeof solids === 'number' ? [solids] : solids)
   )
+}
+
+/** CNT-14: a box, `size` (along x, along y) round `centre` in the element's frame, from `bottom` up by `height`. */
+function boxSolid(c: Context, centre: readonly [number, number], size: readonly [number, number], bottom: number, height: number): number {
+  const position = c.w.add('IFCAXIS2PLACEMENT2D', ref(c.w.add('IFCCARTESIANPOINT', reals([centre[0], centre[1]]))), ref(c.shared.east2))
+  const profile = c.w.add('IFCRECTANGLEPROFILEDEF', en('AREA'), NULL, ref(position), real(size[0]), real(size[1]))
+  const foot = bottom === 0 ? c.shared.identity : c.w.add('IFCAXIS2PLACEMENT3D', ref(c.w.add('IFCCARTESIANPOINT', reals([0, 0, bottom]))), NULL, NULL)
+  return c.w.add('IFCEXTRUDEDAREASOLID', ref(profile), ref(foot), ref(c.shared.up), real(height))
+}
+
+/**
+ * CNT-14: shows a solid as glass, pale and seen through, with one surface style the file writes
+ * once (IFC2x3's styled item, presentation style assignment, surface style and rendering).
+ */
+function glazed(c: Context, solid: number): void {
+  if (c.glassStyle === null) {
+    const colour = c.w.add('IFCCOLOURRGB', NULL, real(0.7), real(0.82), real(0.9))
+    const rendering = c.w.add('IFCSURFACESTYLERENDERING', ref(colour), real(0.65), NULL, NULL, NULL, NULL, NULL, NULL, en('NOTDEFINED'))
+    const style = c.w.add('IFCSURFACESTYLE', str('Glass'), en('BOTH'), refs([rendering]))
+    c.glassStyle = c.w.add('IFCPRESENTATIONSTYLEASSIGNMENT', refs([style]))
+  }
+  c.w.add('IFCSTYLEDITEM', ref(solid), refs([c.glassStyle]), NULL)
 }
 
 /** A plane through `at`, and the side of it a clipping takes away: the side `toward` points to. */
@@ -1089,56 +1119,121 @@ function writeWallProperties(c: Context, wall: Wall, element: number, outside: b
 const VOID_CLEARANCE = 0.01
 
 /**
- * Depth of a door or window leaf. IFC has no "frame and glazing" without a
- * library of profiles; a thin box centred in the wall is enough for a viewer
- * that draws only filled geometry to show that something sits in the cut.
+ * Depth of a rooflight's pane (LVL-6): a thin box in the middle of the roof's depth, as a door's or
+ * window's leaf was drawn before CNT-14 gave doors and windows their frames, leaves and glass.
  */
-const LEAF_DEPTH = 0.05
+const ROOFLIGHT_DEPTH = 0.05
 
-type DoorOperation = 'SINGLE_SWING_LEFT' | 'SINGLE_SWING_RIGHT'
+type DoorOperation =
+  | 'SINGLE_SWING_LEFT'
+  | 'SINGLE_SWING_RIGHT'
+  | 'DOUBLE_DOOR_SINGLE_SWING'
+  | 'FOLDING_TO_LEFT'
+  | 'FOLDING_TO_RIGHT'
+  | 'SLIDING_TO_LEFT'
+  | 'SLIDING_TO_RIGHT'
+  | 'DOUBLE_DOOR_SLIDING'
+  | 'ROLLINGUP'
+  | 'USERDEFINED'
 
 /**
- * IFC's handing for a door that states both values, or null.
+ * IFC's operation for a door, from its kind and handing (CNT-14), or null when it cannot be told.
  *
  * IFC names the hinge side as seen looking the way the door opens (its local +y). Unturned,
  * local x runs from `wall.start`, so `start` is on the left; a door opening to the right face
- * is turned, which puts `start` on its right.
+ * is turned, which puts `start` on its right. A door with no kind is one swinging leaf, and needs
+ * both values; a pair opens one way from both jambs; a folding or pocket door folds or slides
+ * toward the end it names (`hinge`); a sliding door is two leaves; a garage door lifts overhead,
+ * which IFC2x3 has no word for, so it is user-defined and its style's name says so.
  */
 function doorOperation(opening: Opening): DoorOperation | null {
-  if (opening.hinge === undefined || opening.swing === undefined) return null
-  const hingeOnLeft = (opening.hinge === 'start') === (opening.swing === 'left')
-  return hingeOnLeft ? 'SINGLE_SWING_LEFT' : 'SINGLE_SWING_RIGHT'
+  const kind = doorKindOf(opening.kind)
+  const toLeft = (opening.hinge === 'start') === (opening.swing !== 'right')
+  switch (kind) {
+    case 'single':
+      if (opening.hinge === undefined || opening.swing === undefined) return null
+      return toLeft ? 'SINGLE_SWING_LEFT' : 'SINGLE_SWING_RIGHT'
+    case 'double':
+      return 'DOUBLE_DOOR_SINGLE_SWING'
+    case 'folding':
+      if (opening.hinge === undefined || opening.swing === undefined) return null
+      return toLeft ? 'FOLDING_TO_LEFT' : 'FOLDING_TO_RIGHT'
+    case 'pocket':
+      if (opening.hinge === undefined) return null
+      return toLeft ? 'SLIDING_TO_LEFT' : 'SLIDING_TO_RIGHT'
+    case 'sliding':
+      return 'DOUBLE_DOOR_SLIDING'
+    case 'roller':
+      return 'ROLLINGUP'
+    case 'garage':
+      return 'USERDEFINED'
+  }
 }
 
 const HANDING_WORDS: Record<DoorOperation | 'NOTDEFINED', string> = {
   SINGLE_SWING_LEFT: 'single swing, left',
   SINGLE_SWING_RIGHT: 'single swing, right',
+  DOUBLE_DOOR_SINGLE_SWING: 'double, single swing',
+  FOLDING_TO_LEFT: 'folding, to the left',
+  FOLDING_TO_RIGHT: 'folding, to the right',
+  SLIDING_TO_LEFT: 'pocket, sliding to the left',
+  SLIDING_TO_RIGHT: 'pocket, sliding to the right',
+  DOUBLE_DOOR_SLIDING: 'sliding, two leaves',
+  ROLLINGUP: 'roller, rolling up',
+  USERDEFINED: 'garage, lifting overhead',
   NOTDEFINED: 'swing not stated'
 }
 
-const OPERATION_ORDER = { SINGLE_SWING_LEFT: 0, SINGLE_SWING_RIGHT: 1, NOTDEFINED: 2 } as const
+const OPERATION_ORDER: Record<DoorOperation | 'NOTDEFINED', number> = {
+  SINGLE_SWING_LEFT: 0,
+  SINGLE_SWING_RIGHT: 1,
+  NOTDEFINED: 2,
+  DOUBLE_DOOR_SINGLE_SWING: 3,
+  FOLDING_TO_LEFT: 4,
+  FOLDING_TO_RIGHT: 5,
+  SLIDING_TO_LEFT: 6,
+  SLIDING_TO_RIGHT: 7,
+  DOUBLE_DOOR_SLIDING: 8,
+  ROLLINGUP: 9,
+  USERDEFINED: 10
+}
 
-/** A door or window type's key: its kind and size, as the estimate prices it (`door:0.9x2.1`, ARE-13). */
-const styleTag = (type: 'door' | 'window', width: number, height: number): string =>
-  `${type}:${sizeText(width)}x${sizeText(height)}`
+/** IFC2x3's window operation for a stated kind: one panel, or two side by side. */
+const WINDOW_OPERATION: Record<WindowKind, string> = {
+  single: 'SINGLE_PANEL',
+  double: 'DOUBLE_PANEL_VERTICAL',
+  sliding: 'DOUBLE_PANEL_VERTICAL',
+  fixed: 'SINGLE_PANEL',
+  'high-level': 'SINGLE_PANEL'
+}
+
+/**
+ * A door or window type's key: its kind and size, as the estimate prices it (`door:0.9x2.1`,
+ * ARE-13), with the kind the plan states between (`door:sliding:2.2x2.1`, CNT-14, lab AC-13).
+ */
+const styleTag = (type: 'door' | 'window', kind: OpeningKind | null, width: number, height: number): string =>
+  `${type}:${kind === null ? '' : `${kind}:`}${sizeText(width)}x${sizeText(height)}`
 
 function styleName(entry: OpeningStyleEntry): string {
   const size = `${sizeText(entry.width)} x ${sizeText(entry.height)} m`
-  return entry.type === 'door' ? `Door ${size}, ${HANDING_WORDS[entry.operation]}` : `Window ${size}`
+  if (entry.type === 'window') return entry.kind === null ? `Window ${size}` : `Window ${size}, ${entry.kind}`
+  if (entry.kind !== null && entry.operation === 'NOTDEFINED') return `Door ${size}, ${entry.kind}, handing not stated`
+  return `Door ${size}, ${HANDING_WORDS[entry.operation]}`
 }
 
-/** The plan holds no door or window types (CNT-14 will): the style says how Grid grouped them. */
+/** How Grid groups the openings into types (CNT-14: by the kind the plan states, when it states one). */
 const STYLE_NOTE =
-  'The plan holds no door or window types: Grid groups the openings by kind, size (the hole in the wall, width by height) and, for a door, its handing.'
+  'Grid groups the openings by kind (as the plan states it; a door with none is one swinging leaf), size (the hole in the wall, width by height) and, for a door, its handing.'
 
 /** Puts a door or window in its type, made on first use. */
 function typeOpening(c: Context, opening: Opening, operation: DoorOperation | null, filler: number): void {
   const type = opening.type === 'door' ? 'door' : 'window'
+  const kind = statedKind(type, opening.kind)
   const handing = type === 'door' ? operation ?? 'NOTDEFINED' : 'NOTDEFINED'
-  const key = `${styleTag(type, opening.width, opening.height)}:${handing}`
+  const key = `${styleTag(type, kind, opening.width, opening.height)}:${handing}`
   const entry = c.openingStyles.get(key)
   if (entry) entry.fillers.push(filler)
-  else c.openingStyles.set(key, { type, operation: handing, width: opening.width, height: opening.height, fillers: [filler] })
+  else c.openingStyles.set(key, { type, kind, operation: handing, width: opening.width, height: opening.height, fillers: [filler] })
 }
 
 /**
@@ -1151,12 +1246,13 @@ function writeOpeningStyles(c: Context): void {
   const entries = [...c.openingStyles.entries()].sort(
     ([, a], [, b]) =>
       (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) ||
+      (a.kind === b.kind ? 0 : a.kind === null ? -1 : b.kind === null ? 1 : a.kind < b.kind ? -1 : 1) ||
       OPERATION_ORDER[a.operation] - OPERATION_ORDER[b.operation] ||
       a.width - b.width ||
       a.height - b.height
   )
   for (const [key, entry] of entries) {
-    const tag = styleTag(entry.type, entry.width, entry.height)
+    const tag = styleTag(entry.type, entry.kind, entry.width, entry.height)
     const style =
       entry.type === 'door'
         ? // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
@@ -1191,7 +1287,7 @@ function writeOpeningStyles(c: Context): void {
             NULL,
             str(tag),
             en('NOTDEFINED'),
-            en('NOTDEFINED'),
+            en(entry.kind === null ? 'NOTDEFINED' : WINDOW_OPERATION[entry.kind as WindowKind]),
             '.F.',
             '.T.'
           )
@@ -1280,8 +1376,20 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   const fillerPlacement = turned
     ? placement(w, voidPlacement, [width, 0, 0], [-1, 0, 0])
     : placement(w, voidPlacement, [0, 0, 0])
-  const leaf = rectangleProfile(c, width, LEAF_DEPTH, width / 2)
-  const fillerShape = productShape(c, [bodyRepresentation(c, extrusion(c, leaf, opening.height))])
+  // CNT-14: its frame, leaves and glass (`openingParts`), in the filler's own frame: from the
+  // void's corner along the wall, across it toward its left face, up from the sill; turned with
+  // the filler. CNT-18: on a curved wall the filler spans the chord, so the parts' places along
+  // the curve are drawn in to it.
+  const along = width / opening.width
+  const solids = openingParts(opening, wall).map((part) => {
+    const x0 = (part.along[0] - opening.offset) * along
+    const x1 = (part.along[1] - opening.offset) * along
+    const [cx, cy] = turned ? [width - (x0 + x1) / 2, -(part.across[0] + part.across[1]) / 2] : [(x0 + x1) / 2, (part.across[0] + part.across[1]) / 2]
+    const solid = boxSolid(c, [cx, cy], [x1 - x0, part.across[1] - part.across[0]], part.up[0] - opening.sill, part.up[1] - part.up[0])
+    if (part.part === 'glass') glazed(c, solid)
+    return solid
+  })
+  const fillerShape = productShape(c, [bodyRepresentation(c, solids)])
 
   const filler = w.add(
     opening.type === 'door' ? 'IFCDOOR' : 'IFCWINDOW',
@@ -1582,7 +1690,7 @@ function writeRooflights(c: Context, storey: Storey, floor: Floor, roof: FloorRo
     const length = Math.hypot(plane.gx, plane.gy, 1)
     const normal: Triple = [-plane.gx / length, -plane.gy / length, 1 / length]
     const middle = planeAt(plane, at) + roof.thickness / 2
-    const origin: Triple = [at.x - (normal[0] * LEAF_DEPTH) / 2, at.y - (normal[1] * LEAF_DEPTH) / 2, middle - (normal[2] * LEAF_DEPTH) / 2]
+    const origin: Triple = [at.x - (normal[0] * ROOFLIGHT_DEPTH) / 2, at.y - (normal[1] * ROOFLIGHT_DEPTH) / 2, middle - (normal[2] * ROOFLIGHT_DEPTH) / 2]
     const axes = c.w.add(
       'IFCAXIS2PLACEMENT3D',
       ref(c.w.add('IFCCARTESIANPOINT', reals(origin))),
@@ -1598,7 +1706,7 @@ function writeRooflights(c: Context, storey: Storey, floor: Floor, roof: FloorRo
       NULL,
       str('Rooflight'),
       ref(c.w.add('IFCLOCALPLACEMENT', ref(storey.placement), ref(axes))),
-      ref(productShape(c, [bodyRepresentation(c, extrusion(c, pane, LEAF_DEPTH))])),
+      ref(productShape(c, [bodyRepresentation(c, extrusion(c, pane, ROOFLIGHT_DEPTH))])),
       NULL,
       real(rooflight.length),
       real(rooflight.width)
@@ -2281,6 +2389,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     shared,
     materials: { byKind: new Map(), byType: new Map() },
     openingStyles: new Map(),
+    glassStyle: null,
     roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n] as const)),
     guid: (kind, id) => issuer.issue(kind, id),
     issuer,

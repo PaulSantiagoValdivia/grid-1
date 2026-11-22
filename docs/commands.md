@@ -196,6 +196,14 @@ can name and pen its own way.
   the insertion point; a door hung from its other jamb is the same block turned half round. Its
   leaf and swing are on `GRID-DOOR-SWINGS` inside the block. A door that states neither has a
   block of its own with no swing (`GRID-DOOR-900x200`).
+- **A door or window of a kind** ([kinds of door and window](plan-file.md#kinds-of-door-and-window-their-handing-and-the-part-that-opens))
+  other than one leaf, or one that states the part that opens, is drawn by its kind's symbol, one
+  block per symbol, named with its kind, the part that opens and a garage door's height
+  (`GRID-DOOR-SLIDING-2400x200`, `GRID-DOOR-SINGLE-1200x200-L-P800`, `GRID-WINDOW-HIGH-LEVEL-1200x200`).
+  A door's leaves and swings are on `GRID-DOOR-SWINGS`, its fixed panel and a window's faces and
+  glass on the insert's layer, and what the symbol shows above the cut or hidden in the wall (a
+  pocket, a roll, a garage door open overhead, a high-level window) dashed on
+  `GRID-OPENINGS-ABOVE`.
 - **Dimensions** are dimension entities on `GRID-DIMENSIONS`, in the style `GRID` (ticks, metres
   to two places): the chains outside the plan and the room sizes inside it that the drawing
   shows ([the sizes on a drawing](#the-sizes-on-a-drawing)).
@@ -234,7 +242,8 @@ from dxf-layers.json.`). A category the file leaves out keeps Grid's pen:
 - `scale`: a whole number from 1 to 1000; 50 is 1:50. It sets the sheet's viewport and every text
   and dimension size, and the length of the dashes.
 - The categories: `walls-outside`, `walls-inside`, `dividing-lines`, `wall-fill`, `rooms`,
-  `room-tags`, `doors`, `door-swings`, `windows`, `openings`, `fixtures`, `dimensions`, `notes`,
+  `room-tags`, `doors`, `door-swings`, `windows`, `openings`, `openings-above`, `fixtures`,
+  `dimensions`, `notes`,
   `sketch` (a prefix: each category goes on it, a dash and its name), `facts`, `left-out`,
   `label`, `sheet` and `viewport`.
 - Each takes `layer` (1 to 255 characters, none of `< > / \ " : ; ? * | = ,` or a backtick),
@@ -294,7 +303,12 @@ the file says that too.
   usage. The plan holds no build-up, and the type's description says so.
 - **Doors and windows** are typed by size, and doors by handing too (`Door 0.9 x 2.1 m, single
   swing, left`), tagged as the estimate keys them (`door:0.9x2.1`). A door whose swing the plan
-  does not state is typed by its size alone.
+  does not state is typed by its size alone. A door or window that states its kind (CNT-14) is
+  typed by it too, tagged `door:sliding:2.2x2.1`, with IFC's operation for it (`DOUBLE_DOOR_SLIDING`,
+  `FOLDING_TO_LEFT`, `ROLLINGUP`; a garage door is user-defined and its name says it lifts
+  overhead). Each door and window holds its frame, its leaves (closed, hung from the face of the
+  wall it opens toward) and its glass, styled as glass; the OBJ and GLB hold the same parts as
+  `frame_`, `leaf_` and `glass_` objects.
 - **Flats** are not written as zones: the plan format holds no flats yet.
 - **Where it stands.** A plan that reaches more than 500 m from the origin (`farFromOrigin`) is
   moved, in whole steps of that distance, to near the origin, and the move is the site's

@@ -208,3 +208,14 @@ describe('laying one version on the other', () => {
     expect(alignment.shift).toEqual([0, 0])
   })
 })
+
+describe('a door of another kind (CNT-14 with WRT-8)', () => {
+  it('names the new kind and the part that opens on the door, under new ids too', () => {
+    const before = flat()
+    const door = before.openings.find((o) => o.type === 'door')!
+    const after: FloorPlan = { ...before, openings: before.openings.map((o) => (o.id === door.id ? { ...o, kind: 'sliding' as const, opens: { width: 0.5 } } : o)) }
+    const line = (plan: FloorPlan): string | undefined => compareBuildings(before, plan).changes.map((c) => c.text).find((t) => t.includes('now sliding'))
+    expect(line(after)).toContain('part that opens the whole of it → 0.5')
+    expect(line(renamedAndMoved(after, [3, -2]))).toContain('now sliding')
+  })
+})

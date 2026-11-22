@@ -37,7 +37,9 @@ export function baseRefusal(touched: readonly string[], file: string): string {
 }
 
 /** What a change to an opening alters of the opening itself, rather than how it is hung or kept. */
-const SHAPE_KEYS: readonly (keyof OpeningChange)[] = ['offset', 'width', 'height', 'sill', 'type', 'wall']
+// CNT-14: a door or window of another kind is another door or window, so its old self is kept too;
+// a door rehung (`hinge`, `swing`) is the same door.
+const SHAPE_KEYS: readonly (keyof OpeningChange)[] = ['offset', 'width', 'height', 'sill', 'type', 'wall', 'kind']
 
 /** An id the plan does not use: `<id>-before`, then `-before-2` and on. */
 function freeId(taken: Set<string>, id: string): string {

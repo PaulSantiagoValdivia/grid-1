@@ -445,6 +445,12 @@ export const CODES = {
   'opening/doors-collide': {
     values: (s): Values => ({ doors: joined(s.also.map(name), 'join.comma') })
   },
+  // CNT-14: kinds of door and window.
+  'opening/wide-single-leaf': {
+    values: (): Values => ({ wide: num(figureText(tolerance('wideSingleLeaf'))) })
+  },
+  'opening/kind-not-for-type': {},
+  'opening/part-too-large': {},
   'opening/crosses-wall': {},
   'opening/fills-wall': {},
   'opening/on-dividing-line': {},
@@ -683,6 +689,11 @@ export const CODES = {
         return kinds === null ? '' : oneKnownOpening(kinds, s.also.length) ? 'kinds.one' : 'kinds.many'
       }
     }
+  },
+  // CNT-14: the doors whose swing the plan does not state, by name, on one floor.
+  'floor/not-checked-door-swings': {
+    values: (s): Values => ({ doors: joined(s.also.map(name), 'join.comma'), count: s.also.length }),
+    variant: { says: (s) => (s.also.length === 1 ? 'one' : ''), found: (s) => (s.also.length === 1 ? 'one' : '') }
   },
   'floor/sketch-drawn-only': {
     values: (s): Values => ({ categories: s.names.join(', ') })

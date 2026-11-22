@@ -108,7 +108,7 @@ const addRoomTool: GridTool = {
   description:
     'Use this when the person asks for an extension or a new room outside the walls, against one side of a room: "a 3 x 4 m extension at the back of the living room, with an opening into it and a door to the garden". '
     + 'It builds the room\'s three walls, as thick as the wall it stands against, cuts that wall where they meet it, and makes the stretch between the rooms an inside wall. A door or window in that stretch is in the way: pass in_the_way remove or keep (kept, it joins the two rooms); left out, the call is refused naming them. opening_width puts a doorless opening between the rooms and door_width a door in the far side, both centred. '
-    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). Grid has no sliding or folding door: the door is drawn with no swing. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
+    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). The door is drawn with no swing until grid_change_opening gives it one, or a kind such as sliding or folding. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,

@@ -273,7 +273,8 @@ describe('every line', () => {
       const result = inspectPlan(plan, options)
       const findings = result.lines.filter((l) => l.kind === 'finding')
       expect(findings.map((l) => l.message), name).toEqual(report.findings.map((f) => f.message))
-      expect(result.lines.filter((l) => l.kind === 'not-checked').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
+      // CNT-14: the doors with no swing stated come from the door check, not the report.
+      expect(result.lines.filter((l) => l.kind === 'not-checked' && l.code !== 'floor/not-checked-door-swings').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
       // The notes a person reads: the same wording, the names set apart instead of quoted.
       const notes = planNotes(FloorPlanSchema.parse(plan), report).notes
       expect(notes.map((n) => geometry.wordingText(n.title)), name).toEqual(findings.map((l) => l.message))

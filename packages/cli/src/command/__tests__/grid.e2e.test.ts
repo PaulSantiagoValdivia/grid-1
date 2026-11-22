@@ -548,6 +548,9 @@ describe('the built file', () => {
     // HND-12 too, 623,324 bytes; with CNT-4, LVL-5 and BRF-6 too, 643,587 bytes, under the same cap.
     // 655 kB since CNT-18 merged with MSG-11: main was 648,688 bytes, and the curved walls with
     // their words as keys of the message files make it 653,972, again with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(655_000)
+    // 700 kB since CNT-14 merged with CNT-18: its kinds of door and window (the symbols, the parts
+    // in 3D and the IFC, the handing) with MSG-11's languages made 655,506 bytes, and with the
+    // curved walls too (main was 653,972 bytes) 660,801, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(700_000)
   })
 })

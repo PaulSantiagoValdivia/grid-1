@@ -168,6 +168,14 @@ export function isCarriedOpening(opening: Opening): boolean {
 }
 
 /**
+ * The opening as the plan states it: for a slice's part of an opening in a wall through floors,
+ * the whole opening; else the opening itself. CNT-14 checks the part that opens against this.
+ */
+export function statedOpening(opening: Opening): Opening {
+  return openingParts.get(opening)?.whole ?? opening
+}
+
+/**
  * A slice's wall as what draws the building whole draws it (the 3D view, the exports, a section):
  * a wall of one floor as it is, with `openings`; a part of a wall through floors on the wall's own
  * floor as the whole wall, from its foot to its top, with its openings as stated; and a part on a

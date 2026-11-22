@@ -33,6 +33,13 @@ describe('lengths with their unit', () => {
     }
   })
 
+  it("reads a door's part that opens (CNT-14) in its unit, and the read-back keeps it", () => {
+    const plan = written('walls outside 0.3 inside 0.1 height 2.7\nroom living "Living" living 12ft x 10ft\nroom bed "Bed" bedroom 300cm x 3048mm east of living\ndoor d1 between living and bed, centred, 60in wide, height 80in, part 36in x 2000mm\n')
+    expect(plan.openings[0]!.opens!.width).toBeCloseTo(0.9144, 9)
+    expect(plan.openings[0]!.opens!.height).toBeCloseTo(2, 9)
+    expect(written(readRoomsText(plan).text).openings[0]!.opens).toEqual(plan.openings[0]!.opens)
+  })
+
   it('refuses a unit it cannot read, in words, with the forms it takes', () => {
     const result = compileRoomsText('walls outside 0.3 inside 0.1 height 2.7\nroom living "Living" living 12ft13in x 3\n')
     expect(result.plan).toBeNull()

@@ -25,6 +25,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
+- [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
 - [Existing, demolished and new](#existing-demolished-and-new): `plan/read-after-work`, `opening/phase-wall`, `room/phase-wall`; a fit-out on a base plan
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
@@ -729,7 +730,7 @@ above to repeat it on.
 |---|---|
 | `id` | The pattern's id, unique in the plan like every id |
 | `wall` | The wall the openings go in, by id |
-| `opening` | The opening repeated: `type`, `width`, `height`, `sill` (0 when unstated) and, for a door, `hinge` and `swing`, as an opening states them |
+| `opening` | The opening repeated: `type`, `width`, `height`, `sill` (0 when unstated), its `kind` and the part that opens (`opens`, CNT-14) and, for a door, `hinge` and `swing`, as an opening states them. On a wall above drawn the other way, `hinge` and `swing` are turned with it, so each door hangs from the same jamb and opens to the same side |
 | `count` | How many: spread evenly, the first one's near edge at the start margin and the last one's far edge at the end margin; one alone sits in the middle |
 | `spacing` | How far apart, centre to centre, in metres: the first at the start margin, as many as fit before the end margin. With `count` too, that many, from the start margin |
 | `margins` | `start` and `end`: metres kept clear from the wall's start and from its end, along its axis, as an opening's offset is measured. Each 0 when unstated |
@@ -888,6 +889,58 @@ or a wall meets one, and no check reads one. What Grid does with them:
 
 A fact travels with the plan into every export, like a room's name: keep people's names out of
 facts too ([People are kept out of the plan](#people-are-kept-out-of-the-plan)).
+
+## Kinds of door and window, their handing and the part that opens
+
+A door or a window may state its `kind`, and the part of it that opens, `opens` (CNT-14). Both
+are optional: a door that states no kind is one swinging leaf, and a window that states none is
+drawn and measured as before.
+
+```json
+{ "id": "dock-1", "wall": "north", "type": "door", "kind": "roller", "offset": 2, "width": 3.5, "height": 4.5, "swing": "right" }
+{ "id": "d-entry", "wall": "gs", "type": "door", "kind": "single", "offset": 1, "width": 1.8, "height": 2.1, "hinge": "start", "swing": "left", "opens": { "width": 1 } }
+{ "id": "w-bed", "wall": "e", "type": "window", "offset": 0.6, "width": 1.2, "sill": 0.9, "height": 1.2, "opens": { "width": 0.6, "height": 1.2 } }
+```
+
+| Kind | A door | A window | Sweeps the floor | Needs |
+|---|---|---|---|---|
+| `single` | one swinging leaf (a door with no kind is this) | one casement | its quarter disc, as wide as the part that opens | `hinge` and `swing` |
+| `double` | a pair of leaves, one from each jamb | two casements | a quarter disc from each jamb | `swing`; `hinge` names the main leaf's end |
+| `folding` | panels that fold to one side, `foldingPanel` (0.6 m) wide at most | | a strip along it one panel deep | `hinge` (the end it folds to) and `swing` |
+| `sliding` | two leaves that slide past each other in the wall | two panes that slide | nothing | nothing |
+| `pocket` | a leaf that slides into the wall | | nothing | nothing; `hinge` names the end it slides into |
+| `roller` | a curtain that rolls up | | nothing | nothing; `swing` names the face it runs on |
+| `garage` | a door that lifts overhead | | nothing | nothing; `swing` names the face it lifts into |
+| `fixed` | | glass that does not open | | |
+| `high-level` | | a window set high in its wall, above the plan's cut, drawn dashed | | |
+
+`hinge` and `swing` stay in the wall's terms (`start` is the end nearer the wall's start, `left`
+the face its normal points at). An agent need not work them out: `grid_change_opening` takes
+`opens_into` (a room, or `outside`) and `hinged` (`left` or `right`, standing in a room and
+facing the door) seen from `seen_from`, else from the room it opens into, and rooms text takes
+`opens into hall, hinged left` or `hinged right seen from bedroom`. Either turns them into
+`hinge` and `swing` (`handingFromRooms` in `packages/floorplan/src/geometry/handing.ts`); the
+schedule says them back in rooms.
+
+`opens` is the part that opens: `width` along the wall and `height` from its foot (the opening's
+height when left out), at the end the door hangs from (`hinge`), else at the wall's start. A
+door with a part narrower than itself is a leaf beside a fixed glazed panel; a pair's part is
+its main leaf; a window's is its casement, with fixed glass in the rest. The escape check
+measures a window by its part, and a fixed window as opening nothing.
+
+Each kind is drawn with its usual symbol in the plan, the sheet and the DXF (dashed what lies
+above the cut or in the wall, on the DXF layer `GRID-OPENINGS-ABOVE`), and in 3D with its
+frame, its leaves hung closed from the face of the wall it opens toward, and its glass, in the
+views, the OBJ, the GLB and the IFC. The IFC types each door and window by its kind, size and
+handing ([what the IFC holds](commands.md#what-the-ifc-holds-hnd-2)), and the schedules list
+the kind, the part and the handing.
+
+| Code | What it says |
+|---|---|
+| `opening/wide-single-leaf` | A door at least 1.5 m wide (`wideSingleLeaf`) states no kind, so it is drawn and checked as one swinging leaf that wide: say its kind (lab EL-5: 176 of the lab's doors) |
+| `opening/kind-not-for-type` | A kind its type does not take, such as a window that is a `garage`, or any kind on a doorless opening. It is drawn as one with no kind |
+| `opening/part-too-large` | A part that opens wider or higher than the opening, or on a fixed window or a doorless opening. It is taken as the whole opening |
+| `floor/not-checked-door-swings` | Not checked: the doors on a floor whose kind swings or folds and that state neither `hinge` nor `swing`. Each is drawn with a "?" on a sheet and its sweep is not checked |
 
 ## Existing, demolished and new
 

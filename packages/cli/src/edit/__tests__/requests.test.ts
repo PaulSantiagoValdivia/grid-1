@@ -128,7 +128,7 @@ describe("E's six requests, one call each", () => {
     expect(reply.isError, reply.text).toBe(false)
     expect(differences(written('r5.json'), byHand('05'), { 'door-extension': 'slide-garden' })).toEqual([])
     expect(reply.text).toMatch(/Removed window "win-living-south": it was in the wall the new room covers\./)
-    expect((reply.data as { guessed: string[] }).guessed.join('\n')).toMatch(/no swing drawn, as a sliding or folding door would have/)
+    expect((reply.data as { guessed: string[] }).guessed.join('\n')).toMatch(/no swing drawn yet: grid_change_opening with opens_into and hinged hangs it, or kind sliding/)
   })
 
   it('5b. left to say what happens to the window in the way, it is refused in one line naming it', async () => {

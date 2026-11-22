@@ -21,7 +21,10 @@
  * - Units: metres, and the plan's own axes, 1:1, no Y flip (C4).
  * - Doors, windows and doorless openings as blocks: one block per kind and size (and, for a door
  *   whose hinge and swing the plan states, per hand), inserted and turned on its wall. A door's
- *   leaf and arc are the core's (`doorSwing`), on the door-swing layer inside its block.
+ *   leaf and arc are the core's (`doorSwing`), on the door-swing layer inside its block. A door or
+ *   window that states its kind (CNT-14) or the part of it that opens is drawn by its kind's
+ *   symbol (`openingSymbol`), one block per symbol, and what that symbol shows above the cut or
+ *   hidden in the wall is on a dashed layer of its own.
  * - Walls as closed outlines, joined at their corners by the core (SHT-2: `PlanWall.slices`), each
  *   wall filled by a solid hatch on a layer of its own. A curved wall's outline and hatch have its
  *   faces as true arcs, by their bulges (CNT-18: `PlanWall.curve`), and a curved dividing line is
@@ -43,10 +46,11 @@
 
 import type { Vec2 } from '../vec2'
 import { add, distance, normalize, perp, scale, sub } from '../vec2'
-import type { Bounds, PlanDrawing } from '../floorplan'
+import type { Bounds, PlanDrawing, PlanOpening } from '../floorplan'
 import { computeBounds } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
 import { boundsWithDimensions, buildDimensions, type Dimension } from '../dimensions'
+import { openingSymbol, type SymbolPiece } from '../openingSymbol'
 import { TOLERANCES } from '../tolerances'
 import { areaText, metresText } from '../rounding'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
@@ -82,6 +86,9 @@ export const DXF_LAYERS = {
   doorSwings: neutral('door-swings'),
   windows: neutral('windows'),
   openings: neutral('openings'),
+  // CNT-14: what a door's or window's symbol shows above the plan's cut or hidden in its wall (a
+  // pocket, a garage door open overhead, a high-level window), dashed.
+  openingsAbove: neutral('openings-above'),
   fixtures: neutral('fixtures'),
   dimensions: neutral('dimensions'),
   notes: neutral('notes'),
@@ -436,6 +443,12 @@ interface OpeningBlock {
   readonly thickness: number
   /** `L` opens towards +Y of the block, `R` towards −Y; null for a door with no swing stated. */
   readonly hand: 'L' | 'R' | null
+  /**
+   * CNT-14: for a door or window drawn by its kind's symbol, the symbol in the block's own frame,
+   * the kind it is drawn as and, in millimetres, the part that opens and a garage door's height
+   * when they shape it. Null for one drawn as before.
+   */
+  readonly symbol: { readonly kind: string; readonly pieces: readonly SymbolPiece[]; readonly part: number | null; readonly height: number | null } | null
 }
 
 /** Where one opening's block goes. */
@@ -448,11 +461,57 @@ interface OpeningPlace {
 
 const KIND_ORDER: Record<OpeningKind, number> = { door: 0, window: 1, opening: 2 }
 
+const mm = (metres: number): number => Math.round(metres * 1000)
+
+/**
+ * CNT-14: the symbol of a door or window that states its kind (other than one leaf or casement,
+ * which is drawn as before) or the part of it that opens, drawn on the block's own opening: along
+ * +X from the origin, its normal +Y, hung from the origin's end. A door or window hung from its end
+ * jamb is drawn from the other end, and the face it opens to is then the other one (−Y), as for a
+ * door's hand. Null for one drawn as before, and for one whose symbol the core cannot draw (a
+ * door that swings with no swing stated), which keeps its block of before.
+ */
+function kindBlock(opening: PlanOpening, width: number, fromEnd: boolean): Pick<OpeningBlock, 'hand' | 'symbol'> | null {
+  if (opening.type === 'opening' || (opening.opens === undefined && (opening.kind === undefined || opening.kind === 'single'))) return null
+  const swing = opening.swing === undefined ? undefined : fromEnd ? (opening.swing === 'left' ? 'right' : 'left') : opening.swing
+  const own: PlanOpening = {
+    id: opening.id,
+    wallId: opening.wallId,
+    type: opening.type,
+    from: { x: 0, y: 0 },
+    to: { x: width, y: 0 },
+    normal: { x: 0, y: 1 },
+    thickness: opening.thickness,
+    width: opening.width,
+    ...(opening.hinge !== undefined ? { hinge: 'start' as const } : {}),
+    ...(swing !== undefined ? { swing } : {}),
+    ...(opening.kind !== undefined ? { kind: opening.kind } : {}),
+    ...(opening.opens !== undefined ? { opens: opening.opens } : {}),
+    ...(opening.height !== undefined ? { height: opening.height } : {})
+  }
+  const symbol = openingSymbol(own)
+  // A kind its type does not take is read as none (`opening/kind-not-for-type`): drawn as before.
+  if (symbol === null || (symbol.kind === 'single' && opening.opens === undefined)) return null
+  const pieces = symbol.pieces.filter((piece) => piece.shape === 'arc' || piece.part !== 'jamb')
+  const part = opening.opens !== undefined && writable(opening.opens.width) ? mm(opening.opens.width) : null
+  const height = symbol.kind === 'garage' && opening.height !== undefined && writable(opening.height) ? mm(opening.height) : null
+  return { hand: swing === undefined ? null : swing === 'left' ? 'L' : 'R', symbol: { kind: symbol.kind, pieces, part, height } }
+}
+
+/** A symbol as a key: the same lines and arcs, to the file's precision, are one block. */
+function symbolKey(pieces: readonly SymbolPiece[]): string {
+  const p = (at: Vec2): string => `${num(at.x)},${num(at.y)}`
+  return pieces
+    .map((piece) => (piece.shape === 'arc' ? `a${p(piece.center)};${num(piece.radius)};${p(piece.tip)};${p(piece.far)};${piece.counterClockwise ? 1 : 0}` : `l${piece.part}${piece.above ? '^' : ''};${p(piece.from)};${p(piece.to)}`))
+    .join('|')
+}
+
 /**
  * Each opening as a block and where it goes. A block is drawn along +X from its insertion point,
  * as wide as the opening, with the wall's axis on X. A door hung from its start jamb is inserted
  * at the start; one hung from its end jamb is the same block turned half round at the end, so a
- * door of one size has two blocks, one per hand, whichever jamb it hangs from.
+ * door of one size has two blocks, one per hand, whichever jamb it hangs from. A door or window of
+ * a kind (CNT-14) is placed the same way, by the jamb it hangs from or opens toward.
  */
 function openingBlocks(drawing: PlanDrawing): { blocks: OpeningBlock[]; places: OpeningPlace[] } {
   const blocks = new Map<string, OpeningBlock>()
@@ -463,27 +522,41 @@ function openingBlocks(drawing: PlanDrawing): { blocks: OpeningBlock[]; places: 
     const width = distance(opening.from, opening.to)
     if (!writablePoints([opening.from, opening.to]) || !writable(opening.thickness) || !(width > 0)) continue
     const kind: OpeningKind = opening.type === 'door' ? 'door' : opening.type === 'window' ? 'window' : 'opening'
+    const ofKind = kindBlock(opening, width, opening.hinge === 'end')
     const stated = kind === 'door' && opening.hinge !== undefined && opening.swing !== undefined
-    const fromEnd = stated && opening.hinge === 'end'
-    const hand = !stated ? null : (opening.swing === 'left') !== fromEnd ? 'L' : 'R'
-    const key = `${kind}|${num(width)}|${num(opening.thickness)}|${hand ?? ''}`
-    if (!blocks.has(key)) blocks.set(key, { key, kind, width, thickness: opening.thickness, hand })
+    const fromEnd = ofKind !== null ? opening.hinge === 'end' : stated && opening.hinge === 'end'
+    const hand = ofKind !== null ? ofKind.hand : !stated ? null : (opening.swing === 'left') !== fromEnd ? 'L' : 'R'
+    const symbol = ofKind?.symbol ?? null
+    const key = `${kind}|${num(width)}|${num(opening.thickness)}|${hand ?? ''}${symbol === null ? '' : `|${symbol.kind}|${symbolKey(symbol.pieces)}`}`
+    if (!blocks.has(key)) blocks.set(key, { key, kind, width, thickness: opening.thickness, hand, symbol })
     const along = Math.atan2(opening.to.y - opening.from.y, opening.to.x - opening.from.x)
     places.push({ key, kind, at: fromEnd ? opening.to : opening.from, rotation: degrees(fromEnd ? along + Math.PI : along) })
   }
   const sorted = [...blocks.values()].sort(
-    (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.width - b.width || a.thickness - b.thickness || (a.hand ?? '').localeCompare(b.hand ?? '')
+    (a, b) =>
+      KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
+      (a.symbol?.kind ?? '').localeCompare(b.symbol?.kind ?? '') ||
+      a.width - b.width ||
+      a.thickness - b.thickness ||
+      (a.hand ?? '').localeCompare(b.hand ?? '') ||
+      (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   )
   return { blocks: sorted, places }
 }
 
-/** `GRID-DOOR-900x200-L`: the kind, the width and the wall's thickness in millimetres, the hand. */
+/**
+ * `GRID-DOOR-900x200-L`: the kind, the width and the wall's thickness in millimetres, the hand. A
+ * door or window of a kind (CNT-14) adds its kind, the part that opens (`-P800`) and a garage
+ * door's height (`-H2100`): `GRID-DOOR-SLIDING-2400x200`.
+ */
 function blockNames(blocks: readonly OpeningBlock[]): Map<string, string> {
   const names = new Map<string, string>()
   const taken = new Set<string>()
   for (const block of blocks) {
-    const mm = (metres: number): number => Math.round(metres * 1000)
-    const base = `GRID-${block.kind.toUpperCase()}-${mm(block.width)}x${mm(block.thickness)}${block.hand === null ? '' : `-${block.hand}`}`
+    const kind = block.symbol === null ? '' : `-${block.symbol.kind.toUpperCase()}`
+    const part = block.symbol?.part == null ? '' : `-P${block.symbol.part}`
+    const height = block.symbol?.height == null ? '' : `-H${block.symbol.height}`
+    const base = `GRID-${block.kind.toUpperCase()}${kind}-${mm(block.width)}x${mm(block.thickness)}${block.hand === null ? '' : `-${block.hand}`}${part}${height}`
     let name = base
     for (let n = 2; taken.has(name); n++) name = `${base}-${n}`
     taken.add(name)
@@ -492,18 +565,44 @@ function blockNames(blocks: readonly OpeningBlock[]): Map<string, string> {
   return names
 }
 
+/**
+ * CNT-14: a kind's symbol in its block. A door's leaves and swings go on the door-swing layer, as
+ * one leaf's do; its fixed panel, and a window's faces and glass, on layer 0, so they take the
+ * insert's layer (the doors' or the windows'); what lies above the cut or hidden in the wall on
+ * its own dashed layer.
+ */
+function drawSymbol(space: Space, block: OpeningBlock, pieces: readonly SymbolPiece[]): void {
+  for (const piece of pieces) {
+    if (piece.shape === 'arc') {
+      const angle = (p: Vec2): number => Math.atan2(p.y - piece.center.y, p.x - piece.center.x)
+      space.arc(space.layer('door-swings'), { center: piece.center, radius: piece.radius, from: angle(piece.far), to: angle(piece.tip), counterClockwise: piece.counterClockwise })
+      continue
+    }
+    const layer = piece.above ? space.layer('openings-above') : block.kind === 'door' && piece.part === 'leaf' ? space.layer('door-swings') : '0'
+    space.line(layer, piece.from, piece.to)
+  }
+}
+
 /** What one opening block draws, in its own frame: the core's door swing for a door that has one. */
 function drawOpeningBlock(space: Space, block: OpeningBlock): void {
   const { width: w, thickness: t } = block
   const from = { x: 0, y: 0 }
   const to = { x: w, y: 0 }
   if (block.kind === 'window') {
+    if (block.symbol !== null) {
+      drawSymbol(space, block, block.symbol.pieces)
+      return
+    }
     // The wall's break bridged by a line along each face and the glass along the middle.
     for (const y of [t / 2, -t / 2, 0]) space.line('0', { x: 0, y }, { x: w, y })
     return
   }
   // The line across the gap, so an opening reads as one rather than as a missing wall.
   space.line('0', from, to)
+  if (block.symbol !== null) {
+    drawSymbol(space, block, block.symbol.pieces)
+    return
+  }
   if (block.hand === null) return
   const swing = doorSwing({ id: '', wallId: '', type: 'door', from, to, normal: { x: 0, y: 1 }, thickness: t, width: w }, 'start', block.hand === 'L' ? 'left' : 'right')
   if (swing === null) return

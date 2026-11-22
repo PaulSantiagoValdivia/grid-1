@@ -187,7 +187,7 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
     addOpenings.push({ id, wall: farWall['id'], type: 'door', offset: r3(len / 2 - doorWidth / 2), width: doorWidth, sill: 0, height: Math.min(2.1, wall.height) })
     const farSide = facing({ from: { x: s[0], y: s[1] }, to: { x: e[0], y: e[1] }, length: len })
     said.push(`New door ${quoted(id)}, ${doorWidth.toFixed(2)} m wide, centred in the ${farSide ?? 'far'} side of ${quoted(request.name)}, to the outside.`)
-    guessed.push(`Door ${quoted(id)} has no swing drawn, as a sliding or folding door would have (Grid has neither): grid_change_opening with hinge and opens_into hangs it.`)
+    guessed.push(`Door ${quoted(id)} has no swing drawn yet: grid_change_opening with opens_into and hinged hangs it, or kind sliding, folding or another if it is not one swinging leaf.`)
   }
 
   const where = request.from !== undefined ? `${(request.distance ?? 0).toFixed(2)} m from the ${request.from} side of ${hostName}` : `centred on ${hostName}`

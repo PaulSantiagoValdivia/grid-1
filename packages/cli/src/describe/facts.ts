@@ -431,7 +431,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
       room.id,
     ]),
     ...storey.openings.map((o): [string, string] => [
-      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? ''].join(',')}`,
+      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? '', o.kind ?? ''].join(',')}`,
       o.id,
     ]),
   ]

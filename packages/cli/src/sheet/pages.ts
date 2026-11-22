@@ -471,9 +471,12 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
     },
     note: rooms.rules[0]!,
   }
+  // WRT-7: a size in the plan's display, as one figure in metres or each length in its unit.
+  const sizeText = (width: number, height: number): string => units.metric ? `${units.mark(metresText(width))} × ${units.mark(metresText(height))} m` : `${units.length(width)} × ${units.length(height)}`
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
-    name: `${r.number}. ${w.say(`sheet.type.${r.type}`)} ${r.id}`,
-    detail: `${units.metric ? `${units.mark(metresText(r.width))} × ${units.mark(metresText(r.height))} m` : `${units.length(r.width)} × ${units.length(r.height)}`}${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: units.length(r.sill, 'height') })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
+    // CNT-14: its kind, as the plan states it.
+    name: `${r.number}. ${w.say((r.type === 'opening' || r.kind === null ? `sheet.type.${r.type}` : `sheet.kind.${r.type}.${r.kind}`) as MessageKey)} ${r.id}`,
+    detail: `${sizeText(r.width, r.height)}${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: units.length(r.sill, 'height') })}` : ''}${r.opens === null ? '' : `, ${w.say('sheet.opens', { size: sizeText(r.opens.width, r.opens.height) })}`}${r.handing === null ? '' : `, ${w.said(r.handing, r.handingSaid ?? undefined)}`}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
   const c = openings.counts

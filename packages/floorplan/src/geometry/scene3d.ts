@@ -19,7 +19,7 @@ import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
 import { tolerance } from './tolerances'
 import type { WallEnds } from './wall'
-import { SQUARE_ENDS, openingSpan, wallAxis, wallLength, wallParts, wallPath, wallPointAt, wallSegments } from './wall'
+import { SQUARE_ENDS, openingChord, openingSpan, wallAxis, wallLength, wallParts, wallPath, wallPointAt, wallSegments } from './wall'
 import { curveStationsBetween, wallCurve } from './arc'
 import { cross, dot, fromTuple, normalize, sub } from './vec2'
 import { wallJoints } from './joints'
@@ -42,6 +42,10 @@ import { floorEnvelope, type FloorRoof } from './envelope'
 import { wallTopProfile, type RoofPlane, type WallTopPoint } from './roofs'
 import { piecesAsRings } from './polygons'
 import type { MultiPolygon } from 'polygon-clipping'
+import type { OpeningKind } from '../types/floorplan'
+import type { OpeningPartKind } from './openingParts'
+import { openingParts } from './openingParts'
+import { statedKind } from './openingKinds'
 
 /** A point in model space: XY is the plan, Z is height. */
 export interface Vec3 {
@@ -281,6 +285,58 @@ export function sceneShell(plan: FloorPlan): SceneShell | null {
   return { floor: id, slab, roof: roofSolid, parapet }
 }
 
+/** CNT-14: one box of a door or window (its frame, a leaf or its glass) on the plan, solid between two heights above the storey's floor. */
+export interface SceneOpeningPart {
+  readonly part: OpeningPartKind
+  /** On the model's XY plane, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  readonly bottom: number
+  readonly top: number
+}
+
+/**
+ * CNT-14: a door or window in 3D, its frame, leaves and glass (`openingParts`), its leaves closed
+ * and hung from the face of the wall the door opens toward. A doorless opening has none.
+ */
+export interface SceneOpening {
+  readonly id: string
+  readonly wallId: string
+  readonly type: 'door' | 'window'
+  /** Its kind as the plan states it, or null (a door then is one swinging leaf). */
+  readonly kind: OpeningKind | null
+  readonly parts: readonly SceneOpeningPart[]
+}
+
+/** CNT-14: a door's or window's boxes on the plan, from its wall's terms (`openingParts`). */
+export function sceneOpening(opening: Opening, wall: Wall): SceneOpening | null {
+  if (opening.type === 'opening') return null
+  const parts = openingParts(opening, wall)
+  if (parts.length === 0) return null
+  // CNT-18: in a curved wall the hole is the straight chord between the opening's edges (C21), so
+  // the parts stand square to it, their places along the curve drawn in to the chord.
+  const span = openingSpan(opening)
+  const line = wall.arc === undefined ? wallAxis(wall) : openingChord(wall, span.from, span.to)
+  const from = wall.arc === undefined ? 0 : span.from
+  const along = wall.arc === undefined ? 1 : line.length / (span.to - span.from)
+  const point = (at: number, across: number): Vec2 => ({
+    x: line.start.x + line.dir.x * (at - from) * along + line.normal.x * across,
+    y: line.start.y + line.dir.y * (at - from) * along + line.normal.y * across
+  })
+  return {
+    id: opening.id,
+    wallId: wall.id,
+    type: opening.type,
+    kind: statedKind(opening.type, opening.kind),
+    parts: parts.map((p) => ({
+      part: p.part,
+      // The normal is the axis turned counter-clockwise, so this order winds counter-clockwise.
+      outline: [point(p.along[0], p.across[0]), point(p.along[1], p.across[0]), point(p.along[1], p.across[1]), point(p.along[0], p.across[1])],
+      bottom: p.up[0],
+      top: p.up[1]
+    }))
+  }
+}
+
 /**
  * The roof as a solid of the storey: level pieces at its underside, or (LVL-6) each plane's pieces
  * raised onto that plane, as thick as the roof.
@@ -297,6 +353,8 @@ function roofSolidOf(roof: FloorRoof, base: number): SceneSolid {
 
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
+  /** CNT-14: the frames, leaves and glass of the doors and windows the walls hold. */
+  readonly openings: readonly SceneOpening[]
   readonly slabs: readonly SceneSlab[]
   readonly dividers: readonly SceneDivider[]
   /** The stairs that rise from this floor (LVL-3); empty when the plan states none. */
@@ -501,6 +559,7 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
   const { issues, broken } = validatePlan(plan, index)
 
   const walls: SceneWall[] = []
+  const openings: SceneOpening[] = []
   const dividers: SceneDivider[] = []
   const extent: Vec2[] = []
   let height = 0
@@ -537,6 +596,10 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
       ...(wall.arc !== undefined && { pieces: curvedWallPieces(whole.wall, usable, ends) })
     })
     if (elevation.height > height) height = elevation.height
+    for (const opening of usable) {
+      const parts = sceneOpening(opening, wall)
+      if (parts !== null) openings.push(parts)
+    }
   }
 
   const slabs: SceneSlab[] = []
@@ -568,5 +631,9 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
   // faces, which the bounds do not frame either.
   const shell = options.shell !== undefined ? options.shell : sceneShell(plan)
 
-  return { walls, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
+  // CNT-14: the doors and windows in the plan's order, as the exports list every other part.
+  const order = new Map(plan.openings.map((o, i) => [o.id, i] as const))
+  openings.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+
+  return { walls, openings, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
 }

@@ -159,6 +159,28 @@ describe('the lab\'s stair window through two storeys (VE-9)', () => {
     expect(codes(plan)).toContain('floor/unclaimed first')
   })
 
+  it('measures the part that opens of the window through two storeys against the whole window on each floor (CNT-14)', () => {
+    const through = stairWindowThrough()
+    const tall = through.openings.find((o) => o.wall === 'g-n' && o.height > 3)!
+    const plan = parseFloorPlan({
+      ...through,
+      openings: through.openings.map((o) => (o.id === tall.id ? { ...o, kind: 'single', opens: { width: 0.4, height: 2.3 } } : o))
+    })
+    for (const floor of ['ground', 'first']) {
+      const slice = planForFloor(plan, floor)
+      const piece = slice.openings.find((o) => o.id === tall.id)!
+      expect(piece.kind).toBe('single')
+      expect(piece.opens).toEqual({ width: 0.4, height: 2.3 })
+      expect(validatePlan(slice).issues.filter((i) => i.code === 'opening/part-too-large')).toEqual([])
+    }
+    // Higher than the whole window, it is said.
+    const tooHigh = parseFloorPlan({
+      ...through,
+      openings: through.openings.map((o) => (o.id === tall.id ? { ...o, kind: 'single', opens: { width: 0.4, height: 4.8 } } : o))
+    })
+    expect(validatePlan(tooHigh).issues.map((i) => i.code)).toContain('opening/part-too-large')
+  })
+
   it('keeps a plan with no wall through floors exactly as it was sliced', () => {
     const plan = asWritten()
     const slice = planForFloor(plan, 'first')

@@ -10,9 +10,9 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { cameraRecord, compassBearing, doorKindOf, dot, drawingBearing, handingFromRooms, kindFits, kindWords, planOrientation, statedKind, storedView, sub, swingNeeds, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type HandSide, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { english, name, said as sentence } from '@ongrid/floorplan/messages'
-import { FloorPlanSchema, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
+import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -24,7 +24,7 @@ type Pair = [number, number]
 type RawRecord = Record<string, unknown>
 
 /** A change to one opening. `null` takes a key out. */
-export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & { anchor?: OpeningAnchor | null }
+export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & { anchor?: OpeningAnchor | null; kind?: OpeningKind | null }
 
 /** A change to one room. `null` takes a key out. `partOf` makes it a zone of that room (CNT-8). */
 export type RoomChange = {
@@ -163,6 +163,9 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
         delete next['hinge']
         delete next['swing']
       }
+      // CNT-14: nor does a kind its new type does not take, or a part that opens on a doorless opening.
+      if (typeof next['kind'] === 'string' && !kindFits(next['type'] as Opening['type'], next['kind'])) delete next['kind']
+      if (next['type'] === 'opening') delete next['opens']
       return next
     })
   openings.push(...(patch.addOpenings ?? []))
@@ -243,6 +246,12 @@ export interface OpeningChangeRequest {
   readonly from?: From
   /** WRT-3: metres from that end or face to its nearer edge. */
   readonly distance?: number
+  /** CNT-14: its kind (`DOOR_KINDS`, `WINDOW_KINDS`), or null to take it out. */
+  readonly kind?: OpeningKind | null
+  /** CNT-14: the side a door is hinged on, as seen from `seenFrom`, else from the room it opens into. */
+  readonly hinged?: HandSide
+  /** CNT-14: the room, or "outside", `hinged` is seen from. */
+  readonly seenFrom?: string
 }
 
 const sideName = (side: unknown): string | null => (typeof side === 'object' && side !== null && 'room' in side ? (side as { room: string }).room : side === 'outside' ? 'outside' : null)
@@ -290,9 +299,16 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   const width = request.width ?? opening.width
   const height = request.height ?? (request.type === 'door' && opening.type !== 'door' ? 2.1 : opening.height)
   const sill = request.sill ?? (type === 'door' ? 0 : opening.sill)
-  if (type !== 'door' && (request.opensInto !== undefined || request.hinge !== undefined)) {
+  if (type !== 'door' && (request.opensInto !== undefined || request.hinge !== undefined || request.hinged !== undefined)) {
     throw new EditRefused(`Only a door opens into a room or hangs from a side; this would be a ${type}.`)
   }
+  if (request.hinge !== undefined && request.hinged !== undefined) throw new EditRefused('Give hinge (an end of its wall) or hinged (left or right, as seen from a room), not both.')
+  if (request.seenFrom !== undefined && request.hinged === undefined) throw new EditRefused('seen_from says where hinged is seen from: pass hinged as well.')
+  // CNT-14: the kind it will be, which its type must take.
+  if (request.kind != null && !kindFits(type, request.kind)) {
+    throw new EditRefused(`A ${type === 'opening' ? 'doorless opening has no kind' : `${type} cannot be ${request.kind}: a ${type} is ${(type === 'door' ? DOOR_KINDS : WINDOW_KINDS).join(', ')}`}.`)
+  }
+  const kindAfter = request.kind === undefined ? statedKind(type, opening.kind) : request.kind
 
   // Which wall it is on after the change, and where along it.
   const guessed: string[] = []
@@ -414,12 +430,28 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
     }
     const swing = at === 0 ? 'left' : 'right'
     change.swing = swing
-    if (opening.hinge === undefined && request.hinge === undefined) change.hinge = 'start'
+    // One leaf or a folding door needs the end it hangs from; a pair, or a door that slides, rolls or lifts, does not.
+    if (opening.hinge === undefined && request.hinge === undefined && request.hinged === undefined && swingNeeds(doorKindOf(kindAfter)).hinge) change.hinge = 'start'
     if (swing !== opening.swing) said.push(`${label} now opens into ${request.opensInto === 'outside' ? 'the outside' : quoted(survey.facts.rooms.get(request.opensInto)?.name ?? request.opensInto)}.`)
   }
   if (request.hinge !== undefined && request.hinge !== opening.hinge) {
     change.hinge = request.hinge
     said.push(`${label} now hangs from the end nearer the wall's ${request.hinge}.`)
+  }
+  if (request.hinged !== undefined) {
+    // CNT-14: left or right as seen from a room, turned into the wall's terms where the door will be.
+    const placed: Opening = { ...opening, ...(moving ? { wall: onto.id } : {}), offset: change.offset ?? opening.offset, width, ...(change.swing !== undefined ? { swing: change.swing } : {}) }
+    const after: FloorPlan = { ...plan, openings: plan.openings.map((o) => (o.id === id ? placed : o)) }
+    const handing = handingFromRooms(after, placed, { hinged: request.hinged, ...(request.seenFrom !== undefined ? { seenFrom: request.seenFrom } : request.opensInto !== undefined ? { seenFrom: request.opensInto } : {}) })
+    if ('refused' in handing) throw new EditRefused(handing.refused)
+    if (handing.hinge !== undefined && handing.hinge !== opening.hinge) change.hinge = handing.hinge
+    const from = request.seenFrom ?? request.opensInto
+    const where = from === undefined ? 'the room it opens into' : from === 'outside' ? 'the outside' : quoted(survey.facts.rooms.get(from)?.name ?? from)
+    said.push(`${label} is hinged on the ${request.hinged} as seen from ${where}.`)
+  }
+  if (request.kind !== undefined && request.kind !== (opening.kind ?? null)) {
+    change.kind = request.kind
+    said.push(request.kind === null ? `${label} states no kind now: ${type === 'door' ? 'one swinging leaf' : 'drawn as before'}.` : `${label} is now a ${kindWords(type === 'door' ? 'door' : 'window', request.kind)}.`)
   }
   if (said.length === 0) throw new EditRefused(`That is how ${label} is already: nothing to change.`)
   const patch: Patch = { ...emptyPatch(said), guessed }

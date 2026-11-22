@@ -9,6 +9,7 @@
  */
 import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
+import { OPENING_KINDS, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
@@ -314,10 +315,10 @@ const changeOpeningTool: GridTool = {
   title: 'Change or remove a door or window',
   hint: 'change-plan',
   description:
-    'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into, raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "block the kitchen door", "a 4 m opening to the garden". '
+    'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into or which side it is hinged on, make it a sliding, double, folding, pocket, roller or garage door (or a fixed, sliding or high-level window), raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "hinged on the left as seen from the bedroom", "make the dock door a roller door", "block the kitchen door", "a 4 m opening to the garden". '
     + 'It changes one opening in place and answers with what changed and the area verdict. A width that does not fit is refused with the free stretches of the wall, and nothing is written. '
     + 'To move it to another wall, pass room and side ("the bathroom door to its north wall"); to place it, from and distance, as rooms text does ("0.25 from west"): from a side of room, or without room from an end of its wall. Given from, it keeps that distance when walls move later (its anchor). '
-    + 'Do not use to move a wall (grid_move_room_side). Grid has doors, windows and doorless openings only: no bifold, sliding or roof windows. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
+    + 'Do not use to move a wall (grid_move_room_side). Grid has no roof windows. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -328,7 +329,10 @@ const changeOpeningTool: GridTool = {
     sill: { type: 'number', length: true, description: 'Windows: the new sill above the floor, in metres.', examples: [0.9, 0.6], minimum: 0, maximum: 5 },
     type: { type: 'string', enum: ['door', 'window', 'opening'], description: 'Make it a door, a window or a doorless opening.', examples: ['door', 'opening'] },
     opens_into: { type: 'string', id: true, description: 'Doors: the room id it opens into, or "outside".', examples: ['hall', 'outside'] },
-    hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start.', examples: ['start', 'end'] },
+    hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start. For a sliding, pocket or folding door, the end it opens toward. hinged says the same in the person\'s terms.', examples: ['start', 'end'] },
+    hinged: { type: 'string', enum: ['left', 'right'], description: 'Doors: the side it is hinged on as seen from a room, standing in it and facing the door: from seen_from, else the room it opens into.', examples: ['left', 'right'] },
+    seen_from: { type: 'string', id: true, description: 'Doors, with hinged: the room id it is seen from, or "outside". The room it opens into when left out.', examples: ['bedroom', 'hall'] },
+    kind: { type: 'string', enum: [...OPENING_KINDS], description: 'Its kind. A door: single (one swinging leaf, what a door with no kind is), double, sliding, pocket, folding, roller or garage. A window: single, double, sliding, fixed or high-level. A sliding, pocket, roller or garage door sweeps nothing and needs no swing.', examples: ['sliding', 'double', 'roller'] },
     remove: { type: 'boolean', description: 'true to take the opening out and leave the wall solid. Takes nothing else.', examples: [true] },
     room: { type: 'string', id: true, description: 'A room: with side, the opening moves to that side of it; with from, it is measured from that room\'s side.', examples: ['bath', 'hall'] },
     side: { type: 'string', enum: DIRECTIONS, description: 'With room: the side of that room whose wall it moves to.', examples: ['north'] },
@@ -342,6 +346,7 @@ const changeOpeningTool: GridTool = {
       const id = openingArg(survey.plan, args['opening'])
       if (args['room'] !== undefined) roomArg(survey.plan, args['room'])
       if (args['opens_into'] !== undefined && args['opens_into'] !== 'outside') roomArg(survey.plan, args['opens_into'], 'opens_into room')
+      if (args['seen_from'] !== undefined && args['seen_from'] !== 'outside') roomArg(survey.plan, args['seen_from'], 'seen_from room')
       const patch = changeOpening(survey, id, {
         ...(args['width'] !== undefined ? { width: args['width'] as number } : {}),
         ...(args['keep'] !== undefined ? { keep: args['keep'] as (typeof KEEPS)[number] } : {}),
@@ -350,6 +355,9 @@ const changeOpeningTool: GridTool = {
         ...(args['type'] !== undefined ? { type: args['type'] as 'door' | 'window' | 'opening' } : {}),
         ...(args['opens_into'] !== undefined ? { opensInto: args['opens_into'] as string } : {}),
         ...(args['hinge'] !== undefined ? { hinge: args['hinge'] as 'start' | 'end' } : {}),
+        ...(args['hinged'] !== undefined ? { hinged: args['hinged'] as 'left' | 'right' } : {}),
+        ...(args['seen_from'] !== undefined ? { seenFrom: args['seen_from'] as string } : {}),
+        ...(args['kind'] !== undefined ? { kind: args['kind'] as OpeningKind } : {}),
         ...(args['remove'] === true ? { remove: true } : {}),
         ...(args['room'] !== undefined ? { room: args['room'] as string } : {}),
         ...(args['side'] !== undefined ? { side: args['side'] as Direction } : {}),

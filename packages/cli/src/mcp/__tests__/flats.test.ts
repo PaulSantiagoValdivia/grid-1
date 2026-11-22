@@ -109,6 +109,31 @@ describe('CNT-4 flats in the tool server', () => {
     expect(check.text).not.toContain('flat/')
   })
 
+  it('carries a door\'s and a window\'s kind and part into every flat placed, and schedules both the flats and the kinds (CNT-14)', async () => {
+    const rooms = [
+      'plan "Two flats with kinds"',
+      'walls outside 0.3 inside 0.1 height 2.7',
+      'unit one flat "One bedroom" "Flat {n}"',
+      '  room living "Flat {n} Living room" living 5 x 4',
+      '  room bed    "Flat {n} Bedroom"     bedroom 3 x 4 east of living',
+      '  door d-bed between living and bed, 1 from south, 0.8 wide, pocket',
+      '  window w-liv in living south, centred, 1.8 wide, double, part 0.6',
+      'end',
+      'repeat one 2 east as A at 0,0',
+    ].join('\n')
+    const wrote = await b.call('grid_write_rooms', { plan: 'kinds.json', rooms })
+    expect(wrote.isError, wrote.text).toBe(false)
+    const flats = await b.call('grid_schedule', { plan: 'kinds.json', of: 'flats' })
+    expect((flats.data!['rows'] as { id: string }[]).map((r) => r.id)).toEqual(['A1', 'A2'])
+    const openings = await b.call('grid_schedule', { plan: 'kinds.json', of: 'openings' })
+    const rows = openings.data!['rows'] as { id: string; type: string; kind: string | null; opens: { width: number } | null }[]
+    expect(rows.filter((r) => r.type === 'door').map((r) => r.kind)).toEqual(['pocket', 'pocket'])
+    expect(rows.filter((r) => r.type === 'window').map((r) => [r.kind, r.opens?.width])).toEqual([['double', 0.6], ['double', 0.6]])
+    expect(openings.text).toContain('pocket door')
+    const grouped = await b.call('grid_schedule', { plan: 'kinds.json' })
+    expect(grouped.text).toContain('2 × pocket door')
+  })
+
   it('answers as before on a plan that lists no flats', async () => {
     const areas = await b.call('grid_areas', { plan: 'flat.json' })
     expect(Object.hasOwn(areas.data!, 'flats')).toBe(false)

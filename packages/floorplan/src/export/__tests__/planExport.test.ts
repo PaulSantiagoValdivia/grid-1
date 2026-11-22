@@ -24,6 +24,9 @@ function twoFloors(): FloorPlan {
 /** Object names in an OBJ document, in order. */
 const objObjects = (obj: string): string[] => obj.split('\n').filter((l) => l.startsWith('o ')).map((l) => l.slice(2))
 
+/** CNT-14: the sample's door, doorless opening (none) and window parts, in the exports' order. */
+const PARTS = ['frame_o1', 'leaf_o1', 'frame_o2', 'glass_o2', 'frame_o3', 'leaf_o3']
+
 describe('exportPlan', () => {
   it('accepts exactly the four formats', () => {
     expect([...EXPORT_FORMATS]).toEqual(['dxf', 'ifc', 'obj', 'glb'])
@@ -44,7 +47,8 @@ describe('exportPlan', () => {
 
   it('writes an OBJ with one object per wall and room, and the floor\'s slab and roof (LVL-4)', () => {
     const obj = text(exportPlan(samplePlan() as FloorPlan, 'obj', ids).data)
-    expect(objObjects(obj)).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
+    // CNT-14: and each door's and window's parts.
+    expect(objObjects(obj)).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', ...PARTS, 'slab_ground', 'roof_ground'])
     const vertices = obj.split('\n').filter((l) => l.startsWith('v ')).length
     for (const face of obj.split('\n').filter((l) => l.startsWith('f '))) {
       for (const index of face.slice(2).split(' ').map(Number)) {
@@ -58,7 +62,7 @@ describe('exportPlan', () => {
     const { data } = exportPlan(samplePlan() as FloorPlan, 'glb', ids)
     expect(data).toBeInstanceOf(Uint8Array)
     const names = readMeshes(parseGlb(data as Uint8Array)).map((m) => m.name)
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', ...PARTS, 'slab_ground', 'roof_ground'])
   })
 
   it('writes an IFC of the whole building, seeded with the project identity and time', () => {

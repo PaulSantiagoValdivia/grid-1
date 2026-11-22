@@ -216,3 +216,35 @@ describe('done when: a pattern exports the same bytes as its openings written ou
     expect((ifc.match(/IFCWINDOW\(/g) ?? []).length).toBe(6)
   })
 })
+
+describe('a pattern of doors or windows of a kind (CNT-14 with LVL-8)', () => {
+  const sliding = { type: 'door', width: 2, height: 2.1, kind: 'sliding', opens: { width: 1 }, hinge: 'start', swing: 'left' }
+
+  it('gives every opening its kind, its part that opens and its handing', () => {
+    const plan = house({ patterns: [{ id: 'sd', wall: 'gn', opening: sliding, count: 2, margins: { start: 1, end: 1 } }] })
+    expect(placed(plan, 'sd')).toEqual([
+      { id: 'sd-ground-1', wall: 'gn', type: 'door', offset: 1, width: 2, sill: 0, height: 2.1, hinge: 'start', swing: 'left', kind: 'sliding', opens: { width: 1 } },
+      { id: 'sd-ground-2', wall: 'gn', type: 'door', offset: 7, width: 2, sill: 0, height: 2.1, hinge: 'start', swing: 'left', kind: 'sliding', opens: { width: 1 } },
+    ])
+    // A sliding door sweeps nothing: the plan states its handing, and no door is left unchecked.
+    expect(validatePlan(expandPatterns(plan).plan).issues.filter((i) => i.code.startsWith('opening/'))).toEqual([])
+  })
+
+  it('turns the handing on a wall above that runs the other way, so each door hangs from the same jamb', () => {
+    const door = { type: 'door', width: 0.9, height: 2.1, kind: 'single', hinge: 'start', swing: 'left' }
+    const plan = house({ patterns: [{ id: 'dd', wall: 'gn', opening: door, count: 1, floors: ['first'] }] })
+    // The ground's north wall runs from x 10 to 0 and the first floor's from 0 to 10: the end nearer
+    // its start and its left face are the other way round upstairs.
+    expect(placed(plan, 'dd').map((o) => [o.wall, o.kind, o.hinge, o.swing])).toEqual([
+      ['gn', 'single', 'start', 'left'],
+      ['fn', 'single', 'end', 'right'],
+    ])
+  })
+
+  it('reads the part that opens in a plan written in millimetres in metres', () => {
+    const raw = { units: 'mm', patterns: [{ id: 'p', wall: 'gn', opening: { type: 'window', width: 1200, height: 1400, opens: { width: 600, height: 700 } }, count: 2 }], openings: [{ id: 'w', wall: 'gs', type: 'window', offset: 100, width: 1200, height: 1400, opens: { width: 600 } }] }
+    const { raw: inMetres } = planInMetres(raw)
+    expect(inMetres.patterns[0]!.opening.opens).toEqual({ width: 0.6, height: 0.7 })
+    expect(inMetres.openings[0]!.opens).toEqual({ width: 0.6 })
+  })
+})

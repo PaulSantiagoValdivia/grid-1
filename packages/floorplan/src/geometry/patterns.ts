@@ -177,8 +177,10 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
     issues.push(problem(pattern, 'pattern/does-not-fit', said('issue.pattern/does-not-fit', { pattern: label(pattern), wall: name(base.id), why: offsets })))
     return []
   }
-  const { type, width, sill, height, hinge, swing } = pattern.opening
-  const make = (id: string, wall: string, offset: number): Opening => ({
+  const { type, width, sill, height, hinge, swing, kind, opens } = pattern.opening
+  // A wall above that runs the other way has its ends and faces the other way round: the handing is
+  // turned with it, so each door hangs from the same jamb and opens to the same side (CNT-14).
+  const make = (id: string, wall: string, offset: number, reversed = false): Opening => ({
     id,
     wall,
     type,
@@ -186,8 +188,11 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
     width,
     sill,
     height,
-    ...(hinge === undefined ? {} : { hinge }),
-    ...(swing === undefined ? {} : { swing }),
+    ...(hinge === undefined ? {} : { hinge: reversed ? (hinge === 'start' ? 'end' : 'start') : hinge }),
+    ...(swing === undefined ? {} : { swing: reversed ? (swing === 'left' ? 'right' : 'left') : swing }),
+    // CNT-14: its kind and the part that opens, as the pattern's opening states them.
+    ...(kind === undefined ? {} : { kind }),
+    ...(opens === undefined ? {} : { opens: { ...opens } }),
   })
   const own = floorOf(base)
   const out: Placement[] = offsets.map((offset, i) => ({ pattern, opening: make(`${pattern.id}-${own}-${i + 1}`, base.id, offset) }))
@@ -210,7 +215,11 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
       const p1: [number, number] = [axis.sx + axis.dx * (offset + width), axis.sy + axis.dy * (offset + width)]
       const above = curved ? curveAbove(walls, base, offset, width) : wallAbove(walls, base, p0, p1, width)
       if (above === null) missed.push(i + 1)
-      else out.push({ pattern, opening: make(`${pattern.id}-${floor}-${i + 1}`, above.wall.id, above.offset) })
+      else {
+        const on = axisOf(above.wall)
+        const reversed = on !== null && on.dx * axis.dx + on.dy * axis.dy < 0
+        out.push({ pattern, opening: make(`${pattern.id}-${floor}-${i + 1}`, above.wall.id, above.offset, reversed) })
+      }
     })
     if (missed.length > 0) {
       const which =

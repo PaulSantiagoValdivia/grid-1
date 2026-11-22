@@ -201,6 +201,25 @@ function bodyOf(doc: Doc, product: Entity): WorldSolid {
   return { base, top: base.map((p) => add3(p, scale3(direction, depth))), direction, depth }
 }
 
+/** CNT-14: every solid of a product's Body representation, placed in the world (a door's frame, leaves and glass). */
+function bodiesOf(doc: Doc, product: Entity): WorldSolid[] {
+  const shape = entity(doc, ref(product.args[6]))
+  const bodies = refs(shape.args[2])
+    .map((id) => entity(doc, id))
+    .filter((r) => str(r.args[1]) === 'Body')
+  expect(bodies).toHaveLength(1)
+  const object = placementFrame(doc, ref(product.args[5]))
+  return refs(bodies[0]!.args[3]).map((id) => {
+    const solid = entity(doc, id)
+    expect(solid.type).toBe('IFCEXTRUDEDAREASOLID')
+    const position = axisFrame(doc, ref(solid.args[1]))
+    const base = profileOutline(doc, ref(solid.args[0])).map(([x, y]) => toWorld(object, toWorld(position, [x, y, 0])))
+    const direction = norm3(rotate(object, rotate(position, direction3(doc, ref(solid.args[2])))))
+    const depth = num(solid.args[3])
+    return { base, top: base.map((p) => add3(p, scale3(direction, depth))), direction, depth }
+  })
+}
+
 /** Shoelace over x and y: a signed area, positive when counter-clockwise from above. */
 function signedAreaXY(points: readonly V3[]): number {
   let sum = 0
@@ -1270,23 +1289,24 @@ describe('doors and windows fill their void', () => {
     expect(new Set(rooted.map((e) => str(e.args[0]))).size).toBe(rooted.length)
   })
 
-  it('gives the filler a thin leaf, centred in the wall, over the void', () => {
+  it('CNT-14 fills the void with a frame and a leaf: the frame lines the wall, the leaf of a door with no swing sits in its middle', () => {
     const doc = exported(plan)
     const door = fillersOf(doc, openingByName(doc, 'd'))[0]!
-    const solid = bodyOf(doc, door)
-    const terms = inWallTerms(solid, wall)
-
-    const [from, to] = span(terms.along)
+    const solids = bodiesOf(doc, door).map((solid) => inWallTerms(solid, wall))
+    // Together they fill the void: along the opening, through the wall, from the floor to the head.
+    const [from, to] = span(solids.flatMap((t) => t.along))
     expect(from).toBeCloseTo(0.5, 8)
     expect(to).toBeCloseTo(1.4, 8)
-
-    const [left, right] = span(terms.across)
-    expect(right - left).toBeCloseTo(0.05, 8)
-    expect(left + right).toBeCloseTo(0, 8)
-
-    const [low, high] = span(terms.z)
+    const [low, high] = span(solids.flatMap((t) => t.z))
     expect(low).toBeCloseTo(0, 8)
     expect(high).toBeCloseTo(2.1, 8)
+    // Two jambs and a head (a door has no sill), then the leaf, `leafThickness` thick, centred.
+    expect(solids).toHaveLength(4)
+    const leaf = solids[3]!
+    const [left, right] = span(leaf.across)
+    expect(right - left).toBeCloseTo(0.04, 8)
+    expect(left + right).toBeCloseTo(0, 8)
+    for (const jamb of solids.slice(0, 2)) expect(span(jamb.across)[1] - span(jamb.across)[0]).toBeCloseTo(wall.thickness, 8)
   })
 
   it('places the filler relative to the void it fills', () => {
@@ -2259,10 +2279,14 @@ describe('door swing', () => {
     expect(hingeWorld[0]).toBeCloseTo(along * dir[0], 9)
     expect(hingeWorld[1]).toBeCloseTo(along * dir[1], 9)
 
-    // Turning the door doesn't move it: its leaf still fills the opening's span along the wall.
-    const span = bodyOf(doc, door).base.map((p) => dot3(p, dir))
+    // Turning the door doesn't move it: its frame and leaf still fill the opening's span along the wall.
+    const span = bodiesOf(doc, door).flatMap((solid) => solid.base.map((p) => dot3(p, dir)))
     expect(Math.min(...span)).toBeCloseTo(0.5, 9)
     expect(Math.max(...span)).toBeCloseTo(1.4, 9)
+    // CNT-14: closed, the leaf hangs from the face of the wall it opens toward (SHT-2).
+    const leaf = bodiesOf(doc, door)[3]!.base.map((p) => dot3(p, normal))
+    const face = (swing === 'left' ? 1 : -1) * 0.1
+    expect(swing === 'left' ? Math.max(...leaf) : Math.min(...leaf)).toBeCloseTo(face, 9)
   })
 })
 

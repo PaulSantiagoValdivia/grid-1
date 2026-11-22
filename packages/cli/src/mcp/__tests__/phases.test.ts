@@ -154,6 +154,16 @@ describe('a plan with existing, demolished and new parts (CNT-10, EL-10)', () =>
     expect(check.text).not.toContain('overlap')
   })
 
+  it('keeps a door made another kind (CNT-14) as its old self, to be demolished, beside the new one', async () => {
+    b.write('kind.json', refurbishmentRaw())
+    const reply = await ok('grid_change_opening', { plan: 'kind.json', opening: 'd-living', kind: 'sliding' })
+    expect(reply.text).toContain('the opening it was is kept as "d-living-before", to be demolished')
+    const openings = onDisk('kind.json')['openings'] as { id: string; phase?: string; kind?: string }[]
+    const old = openings.find((o) => o.id === 'd-living-before')!
+    const now = openings.find((o) => o.id === 'd-living')!
+    expect([old.phase, old.kind, now.phase, now.kind]).toEqual(['demolished', undefined, 'new', 'sliding'])
+  })
+
   it('keeps an opening taken out, to be demolished, and makes what an edit adds new', async () => {
     b.write('remove.json', refurbishmentRaw())
     await ok('grid_change_opening', { plan: 'remove.json', opening: 'win-east', remove: true })

@@ -17,7 +17,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { floorMesh, makeNamer, shellMesh, stairMesh, wallMesh } from './mesh'
+import { OPENING_PART_KINDS, floorMesh, makeNamer, openingPartMesh, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { english, name, said } from '../../messages/say'
@@ -48,6 +48,17 @@ const GENERATOR = 'Grid'
  */
 const MATERIAL = {
   pbrMetallicRoughness: { baseColorFactor: [0.8, 0.8, 0.8, 1], metallicFactor: 0, roughnessFactor: 1 }
+}
+
+/**
+ * CNT-14: the glass of the windows and of a door's fixed panel, pale and seen through. Written only
+ * when the file holds glass, so a file with none is as before.
+ */
+const GLASS = {
+  name: 'glass',
+  pbrMetallicRoughness: { baseColorFactor: [0.7, 0.82, 0.9, 0.35], metallicFactor: 0, roughnessFactor: 0.1 },
+  alphaMode: 'BLEND',
+  doubleSided: true
 }
 
 /** Rounds up to a multiple of 4, which GLB chunks and glTF views need. */
@@ -94,9 +105,11 @@ function encodeGlb(document: object, binary: Uint8Array | null): Uint8Array {
 interface Part {
   readonly name: string
   readonly mesh: Mesh
+  /** CNT-14: drawn in the glass material. */
+  readonly glass?: true
 }
 
-/** Everything the scene could build, walls first, then room floors, stairs and the shell (LVL-4), as OBJ lists them. */
+/** Everything the scene could build, walls first, then room floors, stairs, the doors' and windows' parts (CNT-14) and the shell (LVL-4), as OBJ lists them. */
 function partsOf(scene: Scene3D): Part[] {
   const nameOf = makeNamer()
   const parts: Part[] = []
@@ -111,6 +124,13 @@ function partsOf(scene: Scene3D): Part[] {
   for (const stair of scene.stairs) {
     const mesh = stairMesh(stair)
     if (mesh) parts.push({ name: nameOf('stair', stair.id), mesh })
+  }
+  // CNT-14: each door's and window's frame, leaves and glass; the glass in its own material.
+  for (const opening of scene.openings) {
+    for (const kind of OPENING_PART_KINDS) {
+      const mesh = openingPartMesh(opening, kind)
+      if (mesh) parts.push({ name: nameOf(kind, opening.id), mesh, ...(kind === 'glass' ? { glass: true as const } : {}) })
+    }
   }
   // LVL-4: the slab the floor stands on, its roof and its parapet.
   const shell = scene.shell
@@ -243,7 +263,7 @@ export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
     )
     meshes.push({
       name,
-      primitives: [{ attributes: { POSITION: index * 2 }, indices: index * 2 + 1, material: 0 }]
+      primitives: [{ attributes: { POSITION: index * 2 }, indices: index * 2 + 1, material: parts[index]!.glass ? 1 : 0 }]
     })
     nodes.push({ name, mesh: index })
   }
@@ -257,7 +277,7 @@ export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
     scenes: [{ nodes: moved === null ? nodes.map((_, i) => i) : [nodes.length] }],
     nodes: [...nodes, ...holder],
     meshes,
-    materials: [MATERIAL],
+    materials: parts.some((part) => part.glass) ? [MATERIAL, GLASS] : [MATERIAL],
     accessors,
     bufferViews,
     buffers: [{ byteLength: size }]

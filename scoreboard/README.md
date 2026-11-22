@@ -249,6 +249,21 @@ moved partitions). Sound plans with a warning stays 95: the generator keeps ever
 clear of the junctions, further than any wall's half thickness, and puts windows only in outside
 walls.
 
+CNT-14 (kinds of door and window, and the part that opens) moved one count. Checks the plan can
+feed, 15 to 17: the probe `openable-part` now asks for an opening's `opens` (it was `none`), which
+is all that checks 8 and 9 need (a window's glass, and the part of it that opens, as a share of
+the floor). The probe `door-leaves` asks for `kind` (`folding`) instead of the lab's `leaves`; the
+one turn that needs it (wide bifold doors and a roof lantern) also needs a roof, so turns answered
+stays 16. The runner now passes each door's kind to the swing check and counts the doors listed as
+not checked among the "not checked" lines; damage that passes in silence stays 278, and sound
+plans with a warning 95 (no sound plan has a door of 1.5 m or more).
+
+CNT-14 merged with LVL-6 (sloped roofs) moved two counts past both. Turns answered, 18 to 19: the
+homeowner's sixth turn (wide bifold doors and a roof lantern) needs `door-leaves` and `roof`, and
+each branch had only one of them; together it is answered. Checks the plan can feed, 16 (LVL-6) to
+18: CNT-14's `openable-part` feeds checks 8 and 9 beside LVL-6's roof check. Every other count is
+both branches' figure.
+
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the
@@ -278,6 +293,17 @@ same axes, so a floor's outline is measured against the one below allowing half 
 along each stretch (`stackShift` and the wall). Before that allowance the guard rose to 218, which
 is how the allowance was found. The stair and shaft findings are plan-check findings, which the
 guard does not count.
+
+CNT-14 merged with WRT-4 and BRF-3 (main at 26e928e) moved two counts past main. Turns answered,
+19 to 20: main's 19 (with WRT-4's `repeat-floor`) and the homeowner's sixth turn, which CNT-14's
+`door-leaves` answers with LVL-6's `roof`. Checks the plan can feed, 20 to 22: CNT-14's
+`openable-part` feeds checks 8 and 9 beside main's. Every other count is both branches' figure.
+
+CNT-14 merged with CNT-4, LVL-5 and BRF-6 (main at 8a0c839e) moves one count past main. Turns
+answered, 21 to 22: main's 21 (with CNT-4's `flats`) and the homeowner's sixth turn, which
+CNT-14's `door-leaves` answers with LVL-6's `roof`. Checks the plan can feed stays CNT-14's 22
+(main's 20 and `openable-part`). Damage that passes in silence is LVL-5's 277 (CNT-14's branch
+had 278). Every other count is both branches' figure.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

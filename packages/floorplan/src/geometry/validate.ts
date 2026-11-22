@@ -20,7 +20,7 @@ import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf, isFloorSlice, planFloors } from './floors'
-import { throughIssues, wallRise, wallStandsOn } from './through'
+import { statedOpening, throughIssues, wallRise, wallStandsOn } from './through'
 import { stackingIssues } from './stacking'
 import { area } from './vec2'
 import { openingSpan, wallLength } from './wall'
@@ -45,6 +45,8 @@ import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { kindFits, statedKind } from './openingKinds'
+import { DOOR_KINDS, WINDOW_KINDS } from '../types/floorplan'
 import { expandPatterns } from './patterns'
 import type { PlanState } from './phases'
 import { idsInPhase, phaseClashes, planHasPhases, planInState } from './phases'
@@ -487,6 +489,8 @@ function validateOpening(
     }
   }
 
+  validateOpeningKind(opening, issues)
+
   if (opening.sill < -overrun) {
     issues.push(
       issue(
@@ -502,6 +506,46 @@ function validateOpening(
   }
 
   return ok
+}
+
+/**
+ * CNT-14: a kind its type does not take (a window that is a garage door, a doorless opening with a
+ * kind), and a part that opens larger than the opening or in a window that is fixed. Each is worth
+ * a look and draws on: the kind is read as not stated, the part as no larger than the opening.
+ */
+function validateOpeningKind(opening: Opening, issues: Issue[]): void {
+  const word = said(`issue.part.kindOf.${opening.type}`)
+  if (opening.kind !== undefined && !kindFits(opening.type, opening.kind)) {
+    const takes = opening.type === 'door' ? joined(DOOR_KINDS, 'join.comma') : opening.type === 'window' ? joined(WINDOW_KINDS, 'join.comma') : said('issue.part.kindOf.none')
+    issues.push(
+      issue(
+        'opening',
+        opening.id,
+        'opening/kind-not-for-type',
+        said('issue.opening/kind-not-for-type', { opening: name(opening.id), word, kind: name(opening.kind), takes }),
+        'warning'
+      )
+    )
+  }
+  const part = opening.opens
+  if (part === undefined) return
+  const overrun = tolerance('openingOverrun')
+  const kind = statedKind(opening.type, opening.kind)
+  // LVL-5 (C19): a floor's slice holds only its stretch of an opening in a wall through floors;
+  // the part that opens is measured against the whole opening, as the plan states it.
+  const whole = statedOpening(opening)
+  const problem: Said | null =
+    opening.type === 'opening'
+      ? said('issue.opening/part-too-large.doorless')
+      : kind === 'fixed'
+        ? said('issue.opening/part-too-large.fixed')
+        : part.width > whole.width + overrun
+          ? said('issue.opening/part-too-large.wider', { width: num(exactMetres(part.width)), whole: num(exactMetres(whole.width)) })
+          : part.height !== undefined && part.height > whole.height + overrun
+            ? said('issue.opening/part-too-large.higher', { height: num(exactMetres(part.height)), whole: num(exactMetres(whole.height)) })
+            : null
+  if (problem === null) return
+  issues.push(issue('opening', opening.id, 'opening/part-too-large', said('issue.opening/part-too-large', { opening: name(opening.id), problem }), 'warning'))
 }
 
 /**

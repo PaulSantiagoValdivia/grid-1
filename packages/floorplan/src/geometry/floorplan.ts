@@ -37,10 +37,11 @@ import { statedOutline } from './massing'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 import { planMarks } from './marks'
+import type { MarkedPart, OpeningKind, OpeningPart, Phase } from '../types/floorplan'
+import { statedKind } from './openingKinds'
 import { planSite, siteExtent, type PlanSite } from './plot'
 import { siteFloors } from './site'
 import { flatOutlines, type PlanFlatOutline } from './flats'
-import type { MarkedPart, Phase } from '../types/floorplan'
 import { partPhases, planHasPhases, planInState } from './phases'
 
 export interface PlanWall {
@@ -126,6 +127,12 @@ export interface PlanOpening {
   readonly hinge?: Opening['hinge']
   /** The face a door opens toward, when the plan states it (`left` is the face `normal` points at). */
   readonly swing?: Opening['swing']
+  /** CNT-14: its kind, when the plan states one its type takes. A door with none is one swinging leaf. */
+  readonly kind?: OpeningKind
+  /** CNT-14: the part of it that opens, when the plan states one. */
+  readonly opens?: OpeningPart
+  /** CNT-14: how high it is, from its sill, for a symbol that shows what lies overhead (a garage door). */
+  readonly height?: number
   /** WRT-6: the plan marks the opening, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
   /** CNT-10: what the work does to it, in a plan with phases; left out in one with none. */
@@ -416,6 +423,7 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
       const span = openingSpan(opening)
       // The hole is straight between its edges (C21): on a curved wall, the chord between them.
       const hole = openingChord(wall, span.from, span.to)
+      const kind = statedKind(opening.type, opening.kind)
       openings.push({
         id: opening.id,
         wallId: wall.id,
@@ -430,6 +438,9 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),
         ...(opening.swing !== undefined && { swing: opening.swing }),
+        ...(kind !== null && { kind }),
+        ...(opening.opens !== undefined && { opens: opening.opens }),
+        height: opening.height,
         ...assumed('opening', opening.id),
         ...phaseOf(opening.id)
       })
