@@ -44,6 +44,13 @@
  *   of the slab it stands on. All three are optional and never defaulted, so a
  *   plan that states none reads and stacks exactly as before (version 1).
  *
+ * C7 · Facts of the person's own (CNT-9)
+ *   A wall, an opening, a room and a floor MAY carry facts of the person's own in `properties`:
+ *   a name and a value, text, a number or true or false (a fire rating, a department, a head
+ *   count). They sit in that one object, never as loose fields, so a misspelt field of the
+ *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
+ *   nothing against a fact. Optional and never defaulted (version 1).
+ *
  * C6 · Items (CNT-12, on CNT-11's decision)
  *   A placed item has a kind, a place (`at`, the middle of its footprint), a turn (degrees,
  *   counter-clockwise), a size (width along its back × depth to its front), a height and a label.
@@ -53,9 +60,11 @@
  *   points and seats are later, in the same shape.
  */
 import { z } from 'zod'
-import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
+import { factKey } from './facts'
 
 export * from './planText'
+export * from './facts'
 
 /**
  * The error `parseFloorPlan` throws and one problem it lists. Callers take them from here and
@@ -97,6 +106,33 @@ const finite = (): z.ZodNumber =>
 // Coordinate pair [x, y] in meters (floor plan space, see C4)
 const Vec2 = z.tuple([finite(), finite()])
 
+/**
+ * CNT-9 (C7): facts of the person's own, by name: text (one line, at most a name's length), a
+ * finite number, or true or false. A name is one line and not blank; two names one part carries
+ * may not differ only in capitals, spaces, dashes or underscores (`factKey`), and a part carries
+ * at most `PROPERTIES_MAX`. A fact the schema refuses is left out on its own, not with the others
+ * (`readParts.ts`). Grid checks nothing against a fact.
+ */
+export const PropertiesSchema = z
+  .record(
+    text('name').pipe(z.string().refine((name) => name.trim().length > 0, { message: 'is blank: a fact needs a name' })),
+    z.union([text('name').pipe(z.string().min(1)), finite(), z.boolean()]),
+  )
+  .superRefine((facts, ctx) => {
+    const names = Object.keys(facts)
+    if (names.length > PROPERTIES_MAX) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `has ${names.length.toLocaleString('en-US')} facts; one part may carry at most ${PROPERTIES_MAX}` })
+      return
+    }
+    const seen = new Map<string, string>()
+    for (const name of names) {
+      const key = factKey(name)
+      const first = seen.get(key)
+      if (first === undefined) seen.set(key, name)
+      else ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'names the same fact as another name on this part, in other capitals or spaces' })
+    }
+  })
+
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
 
@@ -114,6 +150,8 @@ export const FloorSchema = z.object({
   height: finite().positive().optional(),
   // Metres: the thickness of the slab this floor stands on.
   slab: finite().nonnegative().optional(),
+  // CNT-9 (C7): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -159,6 +197,8 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-9 (C7): facts of the person's own. Optional and never defaulted (version 1).
+      properties: PropertiesSchema.optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -246,6 +286,12 @@ export const RoomSchema = z.object({
   // the openings to rooms at another level, and along a dividing line between them. Optional
   // and never defaulted: unstated, the room stands on its storey's floor (version 1).
   floorOffset: finite().optional(),
+  // CNT-9 (C7): the room's number as the person states it, text: "101", "G.04", "B-12a". The
+  // schedules give it in place of the number Grid counts, and the IFC space takes it as its name.
+  // Optional and never defaulted (version 1).
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
+  // CNT-9 (C7): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -296,6 +342,8 @@ export const OpeningSchema = z.object({
   swing: z.enum(['left', 'right']).optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
+  // CNT-9 (C7): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const ReferenceImageSchema = z.object({

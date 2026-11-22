@@ -178,6 +178,11 @@ export interface SceneShow {
   readonly warnings: boolean
   /** `use` fills each room by its use; null gives every room the look's one fill. */
   readonly colourBy: 'use' | null
+  /**
+   * CNT-9: parts picked out, by id, each in its colour: a room's fill at half strength over its
+   * own, a wall, door, window or opening laid over in the colour. Null for none.
+   */
+  readonly paint?: ReadonlyMap<string, string> | null
 }
 
 /** Everything shown, rooms in one fill. */
@@ -480,9 +485,12 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp, input.paperScale)
   const show: SceneShow = { ...SHOW_ALL, ...input.show }
+  const picked = show.paint ?? null
   const fillOf = (id: string): Attrs => {
+    const colour = picked?.get(id)
     const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
-    return use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    const base = use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    return colour === undefined ? base : { ...base, fill: colour, 'fill-opacity': 0.45 }
   }
   const out: SvgNode[] = []
 
@@ -750,6 +758,26 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     }
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+  }
+
+  // CNT-9: the walls, doors, windows and openings picked out, over the drawing, each in its
+  // colour. Drawing, not a target: clicks reach the part underneath.
+  if (picked !== null && picked.size > 0) {
+    const pen = lengthText(3 * mpp)
+    for (const wall of drawing.walls) {
+      const colour = picked.get(wall.id)
+      if (colour === undefined) continue
+      if (wall.virtual) {
+        out.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'picked', 'data-id': wall.id, fill: 'none', stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${wall.id}`))
+        continue
+      }
+      out.push(el('g', { 'data-part': 'picked', 'data-id': wall.id, 'pointer-events': 'none' }, wall.slices.map((slice, index) => el('path', { d: pathOf(slice), fill: colour, 'fill-opacity': 0.75 }, [], String(index))), `picked:${wall.id}`))
+    }
+    for (const opening of drawing.openings) {
+      const colour = picked.get(opening.id)
+      if (colour === undefined) continue
+      out.push(el('path', { d: pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness)), 'data-part': 'picked', 'data-id': opening.id, fill: colour, 'fill-opacity': 0.85, stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${opening.id}`))
+    }
   }
 
   // A stair the plan states (LVL-3), on both floors it joins: its flights and landings in outline,

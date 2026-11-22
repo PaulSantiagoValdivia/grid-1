@@ -41,6 +41,7 @@ import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
+import { factOf, factText, ROOM_NUMBER_FACT, type Facts } from '../../types/facts'
 
 export interface IfcOptions {
   /**
@@ -286,6 +287,28 @@ interface Context {
   /** The GlobalId of an element of this context's floor, or of the building's. */
   guid(kind: string, id: string): string
   readonly issuer: GuidIssuer
+  /**
+   * CNT-9: the elements whose part carries facts of the person's own, in the order they were
+   * written, for one property set each at the end (`writeFacts`).
+   */
+  readonly facts: FactsOn[]
+}
+
+/** CNT-9: an element and the facts its part carries. */
+interface FactsOn {
+  readonly element: number
+  /** What the part is and its id, for the set's GlobalId: `wall`, `door`, `space`, `storey`. */
+  readonly kind: string
+  readonly id: string
+  /** The GlobalIds of the context it was written in: its floor's, or the building's. */
+  readonly guid: Context['guid']
+  readonly facts: Facts
+}
+
+/** CNT-9: notes an element whose part carries facts, for `writeFacts`. */
+function noteFacts(c: Context, element: number, kind: string, part: { readonly id: string; readonly properties?: Facts | undefined }): void {
+  if (part.properties === undefined || Object.keys(part.properties).length === 0) return
+  c.facts.push({ element, kind, id: part.id, guid: c.guid, facts: part.properties })
 }
 
 /** The same context, issuing the identities of one floor's elements. */
@@ -524,6 +547,7 @@ function writeStorey(
     en('ELEMENT'),
     real(level.floorLevel)
   )
+  noteFacts(c, id, 'storey', model.floor)
   return {
     id,
     placement: placementId,
@@ -651,6 +675,7 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
 
   writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
   associateWallMaterial(c, wall, id)
+  noteFacts(c, id, 'wall', wall)
   return { id, placement: wallPlacement, wall, length: axis.length }
 }
 
@@ -840,8 +865,11 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   )
   relate(c, 'IFCRELVOIDSELEMENT', opening.id, ref(element.id), ref(hole))
 
-  // A plain opening only cuts the wall.
-  if (opening.type === 'opening') return null
+  // A plain opening only cuts the wall: its facts go on the void (CNT-9).
+  if (opening.type === 'opening') {
+    noteFacts(c, hole, 'opening', opening)
+    return null
+  }
 
   // IFC opens a door toward its own +y, with a LEFT door's hinge at local x = 0. A door
   // that opens to the wall's right face is turned half a turn about z, from its far end, so
@@ -868,6 +896,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
     real(opening.width)
   )
   relate(c, 'IFCRELFILLSELEMENT', opening.id, ref(hole), ref(filler))
+  noteFacts(c, filler, opening.type, opening)
   if (operation !== null) {
     const doors = c.doorsByOperation.get(operation)
     if (doors) doors.push(filler)
@@ -900,11 +929,13 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     bodyRepresentation(c, extrusion(c, profile, height))
   ])
 
-  return w.add(
+  // CNT-9: a room that states its number is named by it, as BIM tools list spaces, and keeps its
+  // name as the long name. Without one, both are its name, as before.
+  const space = w.add(
     'IFCSPACE',
     str(c.guid('space', room.id)),
     ref(c.owner),
-    str(room.name),
+    str(room.number ?? room.name),
     NULL,
     NULL,
     ref(spacePlacement),
@@ -914,6 +945,10 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     en('INTERNAL'),
     NULL
   )
+  // The stated number is a fact of the room's set too, first, as the DXF writes it.
+  const facts = room.number === undefined || factOf(room, ROOM_NUMBER_FACT) !== undefined ? room.properties : { [ROOM_NUMBER_FACT]: room.number, ...room.properties }
+  noteFacts(c, space, 'space', { id: room.id, properties: facts })
+  return space
 }
 
 type Ring = readonly { readonly x: number; readonly y: number }[]
@@ -1230,6 +1265,32 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
   }
 }
 
+/** CNT-9: the name of the property set that holds a part's facts of the person's own. */
+export const IFC_FACTS_SET = 'Grid_Properties'
+
+/** CNT-9: one fact as an IFC value: an integer, a real, a boolean, or a label. */
+function factValue(value: Facts[string]): string {
+  if (typeof value === 'boolean') return `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? `IFCINTEGER(${int(value)})` : `IFCREAL(${real(value)})`
+  return `IFCLABEL(${str(factText(value))})`
+}
+
+/**
+ * CNT-9: each part's facts of the person's own as one property set, `Grid_Properties`, of one
+ * IfcPropertySingleValue per fact, in the order the plan gives them, related to its element by an
+ * IfcRelDefinesByProperties. The set's name is Grid's own: `Pset_` names are the standard's. The
+ * elements come in the order they were written, which is id order (QAR-5), so the file does not
+ * hang on the plan's order; a plan with no facts writes the same file as before.
+ */
+function writeFacts(c: Context): void {
+  for (const { element, kind, id, guid, facts } of c.facts) {
+    const on: Context = { ...c, guid }
+    const values = Object.entries(facts).map(([name, value]) => c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, factValue(value), NULL))
+    const set = c.w.add('IFCPROPERTYSET', str(on.guid('facts', `${kind}:${id}`)), ref(c.owner), str(IFC_FACTS_SET), NULL, refs(values))
+    relate(on, 'IFCRELDEFINESBYPROPERTIES', `facts:${kind}:${id}`, refs([element]), ref(set))
+  }
+}
+
 /** The property names of `Grid_LeftOut`, by kind: a count and the names. */
 const LEFT_OUT_PROPERTIES: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
   wall: ['Walls', 'WallIds'],
@@ -1294,7 +1355,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     materials: { material: null, byThickness: new Map() },
     doorsByOperation: new Map(),
     guid: (kind, id) => issuer.issue(kind, id),
-    issuer
+    issuer,
+    facts: []
   }
 
   // The fixed entities (project, site, building) use their own kind as the id.
@@ -1375,6 +1437,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeFacts(c)
   writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([

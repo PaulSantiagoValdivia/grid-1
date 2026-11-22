@@ -91,7 +91,7 @@ function wallDiffers(a: Wall, b: Wall): string | null {
   if (a.kind !== b.kind) return 'is of another kind'
   if ((a.virtual === true) !== (b.virtual === true)) return 'is solid in one and a dividing line in the other'
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
-  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor'])
+  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', ...FACTS_CARRIED])
 }
 
 function roomDiffers(a: Room, b: Room): string | null {
@@ -101,8 +101,14 @@ function roomDiffers(a: Room, b: Room): string | null {
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
   if ((a.inside === true) !== (b.inside === true)) return 'sits inside another room in one only'
   if (!sameNumber(a.height, b.height)) return 'has another height'
-  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height'])
+  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height', ...FACTS_CARRIED, 'number'])
 }
+
+/**
+ * CNT-9: the facts of the person's own, and a room's stated number, are kept by id when the text
+ * is written again (`carryFacts`), so they are no difference here: the read-back stays rooms first.
+ */
+const FACTS_CARRIED = ['properties'] as const
 
 /**
  * Any other key of a part, as the schema reads it: a key rooms text does not write (one a later
@@ -127,7 +133,7 @@ function openingDiffers(a: Opening, b: Opening): string | null {
   if (!sameNumber(a.offset, b.offset) || !sameNumber(a.width, b.width)) return 'stands elsewhere along its wall'
   if (!sameNumber(a.sill, b.sill) || !sameNumber(a.height, b.height)) return 'has another sill or height'
   if (a.hinge !== b.hinge || a.swing !== b.swing) return 'hangs or swings another way'
-  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing'])
+  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing', ...FACTS_CARRIED])
 }
 
 interface Difference {

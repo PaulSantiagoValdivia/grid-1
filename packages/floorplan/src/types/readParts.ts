@@ -10,7 +10,8 @@
  *   that differs from one the format knows only in its capitals or spaces (`"Exterior"`,
  *   `"Door"`), and a number where an id goes. The value is read and the line says so.
  * - **value left out**: a value the format cannot read in a field that may be left out. The
- *   field's default is used, or the field is read as not stated, and the line says which. A
+ *   field's default is used, or the field is read as not stated, and the line says which. One
+ *   fact of the person's own (CNT-9) is left out on its own, and the part keeps the others. A
  *   size stated where the field has a default is not: the default would change what is drawn,
  *   so the part is left out (`STATED_SIZES`).
  * - **part left out**: a value the part cannot do without (a wall's start, an opening's type)
@@ -300,6 +301,15 @@ function readPart(list: PartList, index: number, raw: unknown, marks: readonly T
     }
     // A value read as meant that still does not fit is said once, as what is done with it.
     const others = faults.filter((f) => f.kind !== 'read-as-meant' || !sameKeys(f.path, path))
+    // CNT-9: one fact the format cannot read is left out on its own; the part keeps its others.
+    const fact = issue.path[1]
+    if (field === 'properties' && typeof fact === 'string' && isObject(part['properties']) && Object.hasOwn(part['properties'], fact)) {
+      const facts = { ...(part['properties'] as Record<string, unknown>) }
+      delete facts[fact]
+      part['properties'] = facts
+      faults = [...others, { kind: 'value-left-out', ...said, used: null }]
+      continue
+    }
     // A field the part can do without: left out, and its default used. Never the id, and never a
     // number out of range where the field has a default.
     const stated = typeof field === 'string' && (STATED_SIZES[list] ?? []).includes(field) && (value !== null || mark !== undefined)

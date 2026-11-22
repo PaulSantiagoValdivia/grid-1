@@ -21,6 +21,8 @@ import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
 import { kindLabel, leftOutByKind, leftOutSummary, partNames, type LeftOutPart } from './leftOut'
+import type { FloorPlan } from '../../types/floorplan'
+import { factOf, factText, ROOM_NUMBER_FACT } from '../../types/facts'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -44,7 +46,10 @@ export const DXF_LAYERS = {
   leftOut: 'GRID-LEFT-OUT',
   // SHT-7: notes, tags and symbols' words, apart from the room labels. Listed only in a drawing
   // that has some.
-  notes: 'GRID-NOTES'
+  notes: 'GRID-NOTES',
+  // CNT-9: the facts of the person's own, one TEXT each, `[id] name: value`, beside the part that
+  // carries it. Listed only in a file that writes some, so every other file is as it was.
+  facts: 'GRID-FACTS'
 } as const
 
 /**
@@ -178,7 +183,8 @@ const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['na
   'GRID-DOOR-SWINGS': 'CONTINUOUS',
   'GRID-FIXTURES': 'CONTINUOUS',
   'GRID-LEFT-OUT': 'CONTINUOUS',
-  'GRID-NOTES': 'CONTINUOUS'
+  'GRID-NOTES': 'CONTINUOUS',
+  'GRID-FACTS': 'CONTINUOUS'
 }
 
 function writeLineTypeTable(w: DxfWriter): void {
@@ -202,8 +208,9 @@ function writeLineTypeTable(w: DxfWriter): void {
   w.pair(0, 'ENDTAB')
 }
 
-function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], facts: readonly FactLine[]): void {
   const shown = (name: string): boolean =>
+    (name !== DXF_LAYERS.facts || facts.length > 0) &&
     (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) &&
     (name !== DXF_LAYERS.leftOut || leftOut.length > 0) &&
     (name !== DXF_LAYERS.notes || drawing.notes.some((note) => noteText(note) !== null))
@@ -354,7 +361,63 @@ function writeLeftOut(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Left
   }
 }
 
-function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+/** CNT-9: one fact as the DXF writes it: where, and its words. */
+interface FactLine {
+  readonly at: Vec2
+  readonly text: string
+}
+
+/**
+ * CNT-9: the line a fact is written as: `[id] name: value`. The id ties it to its part, which a
+ * reader cannot tell from a place alone; `dxfFacts` in a test reads the lines back this way.
+ */
+export function dxfFactText(id: string, name: string, value: string): string {
+  return `[${id}] ${name}: ${value}`
+}
+
+/**
+ * CNT-9: where each fact of the floor's parts goes: a room's under its label and area, a wall's
+ * and an opening's at its middle, and the floor's own over the drawing's upper left corner, each
+ * fact one line below the one before. A room's stated number comes first, as `room number`.
+ * Parts the drawing does not hold (left out, or on another floor) write none.
+ */
+function factLines(drawing: PlanDrawing, facts: DxfFacts | undefined): FactLine[] {
+  if (facts === undefined) return []
+  const lines: FactLine[] = []
+  const step = TEXT_HEIGHT * 1.4
+  const place = (id: string, at: Vec2, own: FactsOf | undefined, first = 0): void => {
+    if (own === undefined) return
+    const pairs: [string, string][] = []
+    if (own.number !== undefined && factOf(own, ROOM_NUMBER_FACT) === undefined) pairs.push([ROOM_NUMBER_FACT, own.number])
+    for (const [name, value] of Object.entries(own.properties ?? {})) pairs.push([name, factText(value)])
+    pairs.forEach(([name, value], n) => lines.push({ at: { x: at.x, y: at.y - step * (first + n) }, text: dxfFactText(id, name, value) }))
+  }
+  const byId = new Map(facts.parts.map((part) => [part.id, part]))
+  for (const room of drawing.rooms) place(room.id, room.labelAt, byId.get(room.id), 2)
+  for (const wall of drawing.walls) {
+    const [a, b] = wall.centerline
+    place(wall.id, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, byId.get(wall.id))
+  }
+  for (const opening of drawing.openings) place(opening.id, { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }, byId.get(opening.id))
+  if (facts.floor !== null && writablePoints([drawing.bounds.min, drawing.bounds.max])) {
+    const corner = { x: drawing.bounds.min.x, y: drawing.bounds.max.y + step * (Object.keys(facts.floor.properties ?? {}).length + 1) }
+    place(facts.floor.id, corner, facts.floor)
+  }
+  return lines.filter((line) => writablePoints([line.at]) && sanitizeText(line.text).length > 0)
+}
+
+/** CNT-9: the facts, on their layer, as plain left-aligned TEXT. */
+function writeFacts(w: DxfWriter, lines: readonly FactLine[]): void {
+  for (const line of lines) {
+    w.pair(0, 'TEXT')
+    w.pair(8, DXF_LAYERS.facts)
+    w.point(line.at.x, line.at.y)
+    w.pair(40, num(TEXT_HEIGHT * 0.75))
+    w.pair(1, sanitizeText(line.text))
+  }
+}
+
+function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], facts: readonly FactLine[]): void {
   w.pair(0, 'SECTION')
   w.pair(2, 'ENTITIES')
 
@@ -432,6 +495,7 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
     if (text !== null && note.at) writeText(w, DXF_LAYERS.notes, note.at, text)
   }
   writeLeftOut(w, drawing, leftOut)
+  writeFacts(w, facts)
 
   w.pair(0, 'ENDSEC')
 }
@@ -443,9 +507,31 @@ function noteText(note: PlanDrawing['notes'][number]): string | null {
   return note.text
 }
 
+/** CNT-9: what one part states of its own: its facts, and a room's number. */
+export interface FactsOf {
+  readonly id: string
+  readonly number?: string | undefined
+  readonly properties?: Readonly<Record<string, string | number | boolean>> | undefined
+}
+
+/** CNT-9: the facts of one floor's parts, and of the floor itself, for the `GRID-FACTS` layer. */
+export interface DxfFacts {
+  readonly parts: readonly FactsOf[]
+  readonly floor: FactsOf | null
+}
+
+/** CNT-9: the facts of a floor of the plan as the DXF writes them: its walls', openings' and rooms', and its own. */
+export function dxfFactsOf(plan: FloorPlan, floor: { readonly id: string; readonly properties?: FactsOf['properties'] } | null): DxfFacts {
+  const carries = (part: FactsOf): boolean => part.number !== undefined || Object.keys(part.properties ?? {}).length > 0
+  const parts = [...plan.walls, ...plan.openings, ...plan.rooms].filter(carries)
+  return { parts, floor: floor !== null && carries(floor) ? floor : null }
+}
+
 export interface DxfOptions {
   /** HND-6: the parts of the plan this file leaves out, named on the `GRID-LEFT-OUT` layer. */
   readonly leftOut?: readonly LeftOutPart[]
+  /** CNT-9: the facts of the person's own to write on the `GRID-FACTS` layer. None when left out. */
+  readonly facts?: DxfFacts
 }
 
 /**
@@ -458,10 +544,11 @@ export interface DxfOptions {
 export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
   const w = new DxfWriter()
   const leftOut = options.leftOut ?? []
+  const facts = factLines(drawing, options.facts)
 
   writeHeader(w, drawing)
-  writeTables(w, drawing, leftOut)
-  writeEntities(w, drawing, leftOut)
+  writeTables(w, drawing, leftOut, facts)
+  writeEntities(w, drawing, leftOut, facts)
 
   w.pair(0, 'EOF')
   return w.toString()
