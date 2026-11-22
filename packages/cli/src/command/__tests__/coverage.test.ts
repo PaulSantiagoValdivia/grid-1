@@ -78,7 +78,8 @@ describe('every check says what it looked at (CH-1)', () => {
     expect(result.report.rules.map((r) => r.id)).not.toContain('habitable-room-area')
     expect(result.report.rules.map((r) => r.id)).not.toContain('escape-opening')
     expect(result.report.figures).toEqual([])
-    const text = checkText(result, 1)
+    // MSG-10: the skipped rooms, one by one, are in the full report.
+    const text = checkText(result, 1, { full: true })
     expect(text).toContain('Looked at by at least one check: 7 of 7 rooms.')
     expect(text).toContain('  - Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
     expect(text).toContain('      not looked at, 7 rooms: the figure is for bedrooms, living rooms and dining rooms only: ')
@@ -202,7 +203,11 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     expect(size.lookedAt.flatMap((g) => g.ids)).toEqual(['seating'])
     expect(size.findings).toBe(0)
     expect(size.readFor).toEqual(['homes'])
-    const text = checkText(result, 1)
+    // MSG-10: the short report says it once, for the one check that used figures.
+    const short = checkText(result, 1)
+    expect(short).toContain('  - Rooms people live or sleep in have a minimum floor area: 1 room; not looked at 1: no use stated.\n')
+    expect(short).toContain(`\nThe check that uses figures read them for ${HOMES}.\n`)
+    const text = checkText(result, 1, { full: true })
     expect(text).toContain(`  - Rooms people live or sleep in have a minimum floor area: looked at 1 room; 0 findings; its figures were read for ${HOMES}.`)
     // MSG-3: given as the figure used here, with its basis, the kind of building, and its status.
     expect(text).toContain(`is 6.5 m² (habitableRoomMinArea). Basis: US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14 for ${HOMES}. Status ai-found`)

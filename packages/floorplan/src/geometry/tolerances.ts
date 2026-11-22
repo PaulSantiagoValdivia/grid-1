@@ -218,6 +218,28 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Dimensions (SHT-4) ────────────────────────────────────────────────────────────────────
+  squareCorner: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'Two directions within this of a right angle (the sine of about 1 degree) are square. A ' +
+      'room whose four corners are square is dimensioned by its width and depth, any other room ' +
+      'side by side; a wall this close to one of the plan\'s two main directions is dimensioned ' +
+      'in the chains outside the plan.',
+    basis: own
+  },
+  chainPoint: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'Two points of a chain of dimensions outside the plan closer than this along it are one ' +
+      'point, so no dimension in a chain is shorter than this.',
+    basis: own
+  },
+
   // ── Writing a plan rooms first (rooms/, WRT-2) ────────────────────────────────────────────
   roomsWallWidest: {
     kind: 'tolerance',

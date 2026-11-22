@@ -9,8 +9,9 @@
  *   strong contrast, with lines in screen pixels.
  * - `technical`: sheets and files to hand on. Black on white, cut walls outlined heaviest with a
  *   grey tone inside, windows as a break in the wall with two face lines and a glass line, and a
- *   door with no stated swing marked as undecided. Its lines are in millimetres on paper, from a
- *   pen set chosen by the output scale (1:50, 1:100 or 1:200).
+ *   door with no stated swing marked as undecided, and dimensions with 45-degree ticks and
+ *   their numbers along the line (SHT-4). Its lines are in millimetres on paper, from a pen set
+ *   chosen by the output scale (1:50, 1:100 or 1:200).
  * - `dark`: the working look on dark paper, as the app's dark theme.
  *
  * The app's stylesheets (`plan-tokens.css`, `canvas2d/plan.css`) say the working look again in
@@ -190,6 +191,8 @@ export type LinePart =
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
+  /** The 45-degree tick at each end of a dimension line, in a look that draws one (SHT-4). */
+  | 'tick'
   | 'extension'
   | 'leader'
   | 'windowFace'
@@ -240,6 +243,11 @@ export interface Look {
   readonly glass: boolean
   /** A door with no stated hinge or swing gets its own "undecided" mark, not a plain gap. */
   readonly undecidedDoors: boolean
+  /**
+   * Dimensions as a drawing gives them (SHT-4): a 45-degree tick at each end of the line and
+   * the number along it. Otherwise plain ends and the number upright, as on screen.
+   */
+  readonly draftedDimensions: boolean
 }
 
 /** The names a look is chosen by. */
@@ -260,6 +268,7 @@ const SCREEN_LINES: ScreenLines = {
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
+    tick: LINE_PX.dimension,
     extension: LINE_PX.extension,
     leader: LINE_PX.leader,
     windowFace: LINE_PX.opening,
@@ -293,6 +302,7 @@ const PAPER_LINES: PaperLines = {
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',
+    tick: 'fine',
     extension: 'finest',
     leader: 'finest',
     windowFace: 'fine',
@@ -328,7 +338,8 @@ export const WORKING_LOOK: Look = {
   ink: LIGHT_LOOK.wall,
   wallOutline: null,
   glass: false,
-  undecidedDoors: false
+  undecidedDoors: false,
+  draftedDimensions: false
 }
 
 /** The working look on dark paper: the app's dark theme. */
@@ -342,7 +353,8 @@ export const TECHNICAL_LOOK: Look = {
   ink: '#000000',
   wallOutline: '#000000',
   glass: true,
-  undecidedDoors: true
+  undecidedDoors: true,
+  draftedDimensions: true
 }
 
 export const LOOKS: Readonly<Record<LookName, Look>> = {

@@ -19,6 +19,8 @@ door front    in hall north, centred, 0.9 wide, opens in, hinged east
 window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 ```
 
+- North, east, south and west are the drawing's sides, north at the top, even in a plan that
+  states its real north ([plan-file.md](plan-file.md#north-front-and-where-the-building-is)).
 - A size is east-west by north-south, to the inside faces. `3 x 4 centre` measures to the walls'
   centre lines and `8 x 10 outside` to the outside faces; `sizes outside` makes that the
   default. The answer states for each room what its size measured to, and its inside size.
