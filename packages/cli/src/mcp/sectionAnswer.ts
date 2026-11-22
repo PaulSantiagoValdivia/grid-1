@@ -30,7 +30,7 @@ export async function sectionAnswer(plan: FloorPlan, line: SectionLine, asked: L
   return {
     text: lines.join('\n'),
     data: {
-      kind: 'section', floor: null, camera: null, pxPerMetre: view.pxPerMetre, sills: [], ids: [], boxes: [],
+      kind: 'section', floor: null, camera: null, view: null, pxPerMetre: view.pxPerMetre, sills: [], ids: [], boxes: [],
       section: {
         line: { from: [line.from.x, line.from.y], to: [line.to.x, line.to.y], toward: line.toward },
         levels: section.levels,

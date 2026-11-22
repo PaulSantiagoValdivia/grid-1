@@ -31,6 +31,16 @@ export function northLine(facing: PlanFacing): string {
   return `The plan states no north, so these directions take north as ${top}, which is not known to be north: ask the person, and set north in the plan file (degrees counter-clockwise from the top of the drawing).${y}`
 }
 
+/** The north an answer's directions are from, and which way the plan's y runs, as data (BRF-5 shares it). */
+export function northData(facing: PlanFacing): { north: Record<string, unknown>; yAxis: { runs: 'up' | 'down'; stated: boolean } } {
+  return {
+    north: facing.northStated
+      ? { stated: true, degrees: deg(facing.orientation.north!), words: northWords(facing.orientation.north!) }
+      : { stated: false, assumed: facing.orientation.yAxis === 'down' ? 'the top of the page the plan was drawn on, -y' : 'the top of the drawing, +y' },
+    yAxis: { runs: facing.orientation.yAxis, stated: facing.orientation.yAxisStated },
+  }
+}
+
 export interface FacingAnswer {
   readonly lines: readonly string[]
   readonly data: Record<string, unknown>
@@ -72,10 +82,7 @@ export function facingAnswer(plan: FloorPlan, room?: string): FacingAnswer {
   }
   const openings = facing.openings.filter((o) => room === undefined || o.rooms.includes(room))
   const data = {
-    north: facing.northStated
-      ? { stated: true, degrees: deg(facing.orientation.north!), words: northWords(facing.orientation.north!) }
-      : { stated: false, assumed: facing.orientation.yAxis === 'down' ? 'the top of the page the plan was drawn on, -y' : 'the top of the drawing, +y' },
-    yAxis: { runs: facing.orientation.yAxis, stated: facing.orientation.yAxisStated },
+    ...northData(facing),
     front: front === null ? null : 'missing' in front ? { part: front.part, id: front.id, faces: null, missing: front.missing } : { part: front.part, id: front.id, wall: front.wall, faces: front.faces, bearing: deg(front.bearing) },
     rooms: rooms.map((r) => ({ id: r.room, name: name.get(r.room) ?? r.room, floor: r.floor, faces: r.walls.map((w) => w.faces), walls: r.walls.map((w) => ({ faces: w.faces, length: Math.round(w.length * 1000) / 1000 })), windows: r.windows })),
     walls: facing.walls

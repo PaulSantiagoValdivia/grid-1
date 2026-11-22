@@ -3,14 +3,16 @@
  * in the technical look, as a file to hand on, unless `--look` names another (SHT-1), with what went wrong marked on it by the numbers
  * `grid check` gives, and listed under it (MSG-8), and the plan's title, notes, key and sketch
  * (SHT-7); `--hide`, `--colour` and `--key` choose what it shows.
- * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`. With `--section`, a
- * section along a line through every floor, through `drawSection` (LVL-9); `--marks` adds the
- * marks for the plan's other drawings to a floor plan.
+ * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`; with `--view`, a
+ * view saved with the plan (VEW-3), through its camera record. With `--section`, a section along a
+ * line through every floor, through `drawSection` (LVL-9); `--marks` adds the marks for the plan's
+ * other drawings to a floor plan.
  * Written to `--out`, or to standard output when no file is named.
  */
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
 import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
+import { cameraRecord, findView, viewSetting } from '@ongrid/floorplan/geometry'
 import { drawPlan } from '../draw/drawPlan'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
@@ -23,6 +25,7 @@ import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
   '--3d': { takesValue: false, help: 'Draw the 3D model as the app opens it, as a PNG of 1200 by 800 pixels.' },
+  '--view': { takesValue: true, help: 'Draw a view saved with the plan (grid_save_view), by name: the 3D model through its camera, as a PNG of 1200 by 800 pixels.' },
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
   '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
@@ -47,6 +50,8 @@ export interface DrawRequest {
   readonly png: boolean
   /** The 3D model instead of a floor plan. */
   readonly threeD?: boolean
+  /** VEW-3: a saved view's name: the 3D model through its camera. */
+  readonly view?: string
   readonly out?: string
   readonly floor?: string
   readonly scale?: string
@@ -114,6 +119,7 @@ export function sectionAsked(request: DrawRequest): SectionAsked {
 
 /** Checks the options against each other, before the plan is read. */
 export function checkDrawRequest(request: DrawRequest): { scale: number; look: LookName } {
+  if (request.view !== undefined && request.floor !== undefined) throw new UsageError('--view draws the floors its camera was saved with: leave --floor or --view out.')
   // A still is always a PNG, so --png would say nothing.
   if (request.threeD && request.png) throw new UsageError('--png does nothing with --3d, which always draws a PNG: leave --png out.')
   if (request.threeD && request.ids) throw new UsageError('--ids draws the ids on a floor plan, not on the 3D model: leave --ids or --3d out.')
@@ -155,6 +161,15 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     return { file: drawn.file, undecidedDoors: [], sectionNote: drawn.note }
   }
   const floor = floorOption(loaded.plan, request.floor)
+  if (request.view !== undefined) {
+    const saved = findView(loaded.plan.views, request.view)
+    if (saved === null) {
+      const names = (loaded.plan.views ?? []).slice(0, 20).map((v) => JSON.stringify(v.name))
+      throw new UsageError(`--view names no view saved with this plan. ${names.length === 0 ? 'It has no saved views.' : `Its views: ${names.join(', ')}.`}`)
+    }
+    const { drawStill } = await import('../draw/drawStill')
+    return { file: await drawStill(loaded.plan, { camera: cameraRecord(loaded.plan, viewSetting(saved)), scale }), undecidedDoors: [] }
+  }
   if (request.threeD) {
     // Loaded only for a still: it brings Three and React with it.
     const { drawStill } = await import('../draw/drawStill')

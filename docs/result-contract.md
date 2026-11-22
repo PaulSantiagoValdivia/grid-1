@@ -220,6 +220,7 @@ label.
 | `opening/degenerate` | {thing} has no size | a width and a height above 0 |
 | `opening/out-of-wall` | {thing} runs off its wall | its offset and width within the wall's length |
 | `opening/too-tall` | {thing} reaches above the top of its wall | its sill and height together no higher than the wall |
+| `opening/above-roof` | {thing} reaches above the roof over its wall | its sill and height together no higher than the roof over that stretch of its wall |
 | `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
 | `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
 | `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
@@ -270,6 +271,8 @@ label.
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
+| `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
 | `floor/spaces-unknown` | The spaces the walls enclose on {thing} could not be worked out | walls Grid can join into spaces |
 | `floor/overlaps-unknown` | The rooms on {thing} were not all compared to see whether they overlap | fewer pairs of rooms lying over each other |
@@ -595,6 +598,63 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - `grid draw` takes `--section`, `--toward` and `--marks` the same way.
 - No new code in the result record: a section and its marks are pictures. `resultVersion`
   stays 1.
+
+### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
+
+- `grid_view` `kind=3d` takes `bearing`, `tilt`, `distance`, `eye_height`, `lens`, `room`,
+  `camera`, `view`, `turn` and `tilt_by` beside `floor` and `from`; a refusal of an argument
+  another kind takes lists them all. `eye_height` is now 0 to 10,000 m in the schema, and
+  `kind=eye` still refuses one outside 0.3 to 3.
+- `camera` in `grid_view`'s data is the camera record for `kind=3d` and `kind=eye` (null for
+  `plan`), in place of `{ at, heading, tilt, fov }`: `target` (`room`, `point`), `bearing`,
+  `bearingFrom` (`north` or `plan up`), `north`, `tilt`, `distance`, `eyeHeight`, `floor`, `lens`
+  (`focalLength` in mm, `sensor` 36 × 24 mm), `cut`, `floors`, `standingIn` (`room`, `name`,
+  `floor`, `words`: `outside any room` when it stands in none), `position`, `direction`, `up`,
+  `fieldOfView` (vertical, degrees) and `aspectRatio`. The old `at` is `position`, the old
+  `heading` is `direction` on the drawing, the old `tilt` (negative looking down) is `tilt`
+  (positive looking down), the old `fov` is `fieldOfView`. Data adds `view`, the saved view's
+  name or null. The text adds the camera in two lines, how to move it, and the plan's saved
+  views. The 3D view's default `from` is read as before.
+- A new tool, `grid_save_view`, the last of the 30: saves a camera record by name in the plan's
+  `views` ([plan-file.md](plan-file.md#saved-views-and-the-camera-record)), with `replace` and
+  `remove`. Its receipt is the change receipt with `view`, `removed`, `camera` and `views`.
+- `grid_mirror` mirrors the plan's saved views and says so in `changed`.
+
+### 2026-11-22: which rooms get the sun, as a table (BRF-5)
+
+- `grid_measure` takes `what=sun`, with `room` for one room: `answer` holds `measures`
+  (`"geometry, not a daylight result"`), `north` and `yAxis` as `what=facing` gives them, and
+  `rooms`, each with `id`, `name`, `floor`, `floorArea` (net, m²), `windowArea` (m²),
+  `windowToFloor` (the ratio of the two, or null for a room with no floor area) and
+  `windowWalls`. Each window wall has `wall`, `from` and `to` (metres along the wall), `faces`
+  (one of the eight points), `bearing` (degrees clockwise from north), `windows` (`id`, `width`,
+  `height`, `area`), `windowArea` and `depth`: metres, square to the wall, from its inside face
+  to the farthest point of the room's floor. A room with no window in an outside wall has an
+  empty `windowWalls`. Every line of the table in the text starts "Geometry,"; a plan that
+  states no north says so on the line after the label. No new message code and no new tool.
+
+### 2026-11-22: sloped ceilings and roofs (LVL-6)
+
+- A floor may state its `roof` (flat, mono-pitch, gable or hip, with `eaves` and a `pitch` or a
+  `ridge`). Its walls are cut to it, so a wall's top may slope: the new refusal
+  `opening/above-roof` names a door or window whose top lies above the roof over its stretch of
+  wall, with the height that fits at its sill as its fix (`height`), as `opening/too-tall` does.
+- New refusal `floor/rooflight-misplaced`: a rooflight (`floors[].roof.rooflights`) outside the roof
+  or across a ridge or a hip is left out. New warning `floor/dormers-not-drawn`: a roof that lists
+  `dormers` is drawn and measured without them; dormers are not supported yet.
+- `opening/missing-wall` on an opening whose wall names the roof, a room or a floor adds that a
+  window in the roof is a rooflight in its floor's roof, and that dormers are not supported yet.
+- `grid_areas` answers `headroom`: the floor by headroom band (at least `headroomLow`, 1.5 m, and
+  `headroomFull`, 2.2 m, Grid's own figures) over the floors that state their roof, else null;
+  such a floor's rooms carry `headroom` (`bands`, `lowest`, `highest`), and `measures` holds the
+  rule `headroom`.
+- `grid_takeoff`'s roof lines gain `shape` (null for the flat roof Grid lays on the walls), `pitch`,
+  `slopeArea` and `rooflights`; a room's `wallFace` is measured under the top the roof leaves each
+  wall. `grid_measure`'s room height under a stated roof comes `from: "roof"`, with `roof`
+  (`lowest`, `highest`).
+- The IFC writes a wall the roof cuts, and a space under the roof, as a clipped solid
+  (`Clipping`), and a sloped roof as an `IfcRoof` of its type over one clipped `ROOF` slab, with
+  each rooflight an `IfcOpeningElement` filled by an `IfcWindow`.
 
 ### 2026-11-22: the brief beside the plan, met or missed after every change (BRF-1)
 
