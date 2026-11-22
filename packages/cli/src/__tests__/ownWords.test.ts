@@ -54,7 +54,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/write.ts': [26, 'command'],
   'packages/cli/src/describe/card.ts': [12, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
-  'packages/cli/src/distribution/listing.ts': [33, 'developer'],
+  'packages/cli/src/distribution/listing.ts': [82, 'developer'],
   'packages/cli/src/distribution/zip.ts': [1, 'developer'],
   'packages/cli/src/draw/cameraAsk.ts': [12, 'agent'],
   'packages/cli/src/draw/canvas.ts': [1, 'developer'],
@@ -71,13 +71,14 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/edit/stretch.ts': [10, 'notYet'],
   'packages/cli/src/export/dxfProfile.ts': [5, 'command'],
   'packages/cli/src/export/projectExports.ts': [2, 'command'],
+  'packages/cli/src/firm/standards.ts': [18, 'command'],
   'packages/cli/src/fs/projectFiles.ts': [49, 'command'],
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
   'packages/cli/src/mcp/briefTool.ts': [36, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [16, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [284, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [285, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -218,9 +219,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     }
     // The ratchet: what is shown to the person and not moved yet only comes down. It was 913 when
     // MSG-11 landed; main's MSG-5, COD-3, CNT-8, CNT-9, BRF-1, BRF-5, LVL-6, WRT-8 and VEW-3 brought
-    // 190 more of the kinds MSG-11 left for later, LVL-8 8, HND-1 14, BRF-3 and WRT-4 63, and LVL-9
-    // and CNT-17 65 more (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1253)
+    // 190 more of the kinds MSG-11 left for later, LVL-8 8, HND-1 14, BRF-3 and WRT-4 63, LVL-9
+    // and CNT-17 65, and COD-8 18 more (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1271)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
@@ -238,7 +239,10 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
       // After merging main at e486ccba: LVL-9's section, its list of what it took and the plan's marks.
       'packages/floorplan/src/geometry/section.ts',
       'packages/viewer/src/picture/drawingMarks.ts',
-      'packages/cli/src/draw/drawSection.ts'
+      'packages/cli/src/draw/drawSection.ts',
+      // After merging main at 4fe29edc: COD-8's firm standards, their lines and where each was measured.
+      'packages/rules/src/result/firm.ts',
+      'packages/cli/src/firm/measure.ts'
     ]) {
       expect(counts.get(file), file).toBe(0)
     }

@@ -148,3 +148,39 @@ describe('what the plan marks as needing to be accessible, in Spanish (CNT-17, a
     }
   })
 })
+
+describe("the firm's own standards, in Spanish (COD-8, after merging main at 4fe29edc)", () => {
+  const plan = {
+    version: '1',
+    units: 'm',
+    walls: [
+      { id: 's', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'e', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'n', start: [4, 3], end: [0, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'w', start: [0, 3], end: [0, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+    ],
+    rooms: [{ id: 'hall', name: 'Hall', use: 'corridor', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [{ id: 'd1', wall: 's', type: 'door', offset: 1, width: 0.9, height: 2.1, sill: 0 }],
+  }
+  const firm = {
+    file: 'firm-standards.json',
+    problem: null,
+    standards: [{ measure: 'corridor_width', value: 1.5, written: 'm', name: 'Pasillos', note: null, uses: [], kinds: [] }],
+    measured: [{ standard: 0, thing: { kind: 'room', id: 'hall' }, floor: null, measured: 1.234, precision: 0, said: 'between walls', sentence: { key: 'line.part.firm.at.width' }, also: [] }],
+  } as const
+
+  it('says the line in Spanish, with the same code, firm figure and values, and no word of approval', () => {
+    const english = inspectPlan(plan, { firm: firm as never }).lines.find((l) => l.code === 'firm/corridor-width')!
+    const spanish = inspectPlan(plan, { firm: firm as never, language: 'es' }).lines.find((l) => l.code === 'firm/corridor-width')!
+    expect(english.found).toMatch(/^1\.23 m, the widest circle the empty room holds; measured as /)
+    expect(spanish.message).toBe('Estancia "Hall": el paso tiene 1,23 m de ancho en su punto más estrecho, por debajo del valor propio del estudio de 1,5 m para ancho de pasillo ("Pasillos")')
+    expect(spanish.found).toMatch(/^1,23 m, el mayor círculo que admite la estancia vacía; medido como el punto más estrecho/)
+    expect(spanish.needed).toContain('propio del estudio y no de ningún código ni norma')
+    expect([spanish.kind, spanish.thing, spanish.firm, spanish.values]).toEqual([english.kind, english.thing, english.firm, english.values])
+    expect(spanish.values).toMatchObject({ figure: 1.5, measured: 1.23, file: 'firm-standards.json' })
+    for (const text of [spanish.message, spanish.found, spanish.needed, spanish.fix]) {
+      expect(approvalWords(text)).toEqual([])
+      expect(text).not.toMatch(/\{[A-Za-z]/)
+    }
+  })
+})

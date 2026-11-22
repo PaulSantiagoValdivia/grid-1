@@ -581,3 +581,97 @@ The ratchet moves from 1188 to 1253.
     accessibility line. All are drafts, in `docs/languages.md`'s table.
 24. **Main has moved again**, to 4fe29edc (COD-8, a firm's own standards as checks), while this
     merge was made. It is not merged here; that is the next merge.
+
+## After merging main at 4fe29edc
+
+Main brought COD-8: a firm's own standards (`firm-standards.json` beside the plan) set against
+the plan as `firm/` findings, under their own heading, apart from the code figures, and four
+skills in the plugin. Seven files conflicted: `CHANGELOG.md`, `docs/result-contract.md`,
+`command/check.ts`, `command/main.ts`, `mcp/readTools.ts`, rules `result/catalogue.ts` and
+`result/inspect.ts`. Main adds no tool and no plan field. Main's English output is kept word for
+word.
+
+### How the conflicts were resolved
+
+- **The record** (`result/catalogue.ts`, `inspect.ts`, `firm.ts`): MSG-11's files, with COD-8's
+  parts added. The seven codes are logic only: `firmEntry(measure)` gives a `firm/` line its
+  values (`figure`, `measured`, `what`, `measures`, `named`, `file`, `where`) and the `none`
+  wording of `says` and `found` when nothing was measured; `firm/not-read` takes `file`. The
+  words are `line.firm/<code>.says[.none]|found[.none]|needed|fix`. `firmLines`, the `firm` field
+  on a line and on the record, and `InspectOptions.firm` are main's, beside MSG-11's `language`;
+  the stage is `firm` (`line.part.stage.firm`, "firm standards"). A part left empty (no name, no
+  place) is no longer put in a line's `values`, so a firm line's values are `figure`, `measured`,
+  `file` and the line's names.
+- **The firm's own words** (`firm.ts`): `FIRM_HEADING`, `FIRM_NOTE` and each measure's `what` and
+  `measures` are now read from `en.ts` (`report.firm.title`, `report.firm.note`,
+  `line.part.firm.what.*`, `line.part.firm.measures.*`), the same English; `FirmUsed.heading` is
+  typed `string` instead of the literal. `FirmMeasured` gains an optional `sentence` (the place it
+  was measured, by key); `said` stays its English.
+- **Where each part was measured** (`firm/measure.ts`): said by key (`line.part.firm.at.*`,
+  `line.part.firm.point`), with `said` its English as main writes it; `besideSaid` says what
+  `besideText` (`quantities/use.ts`) says.
+- **The report** (`command/check.ts`, `command/main.ts`): MSG-11's `checkPlan` with main's `firm`
+  passed to `inspectPlan`; `countsText`, `firmHeadingText`, `firmNoNoteText`, `firmStandardsText`
+  and the new `firmSectionTitle` say their words with `t()` (`report.count.firm.*`,
+  `report.firm.*`); a standard's room uses are said by their label in the report's language.
+  `grid check` reads the firm's file and passes the language and the firm.
+- **`grid_check`** (`mcp/readTools.ts`): the firm's heading, the firm lines past the first 12
+  (`tool.check.firm.more`), "no findings outside the firm's own standards"
+  (`tool.check.firm.noCodeFindings`) and the full list of standards, inside MSG-11's
+  `inLanguage`; `data.firm` is main's. Main gave the output schema an explicit list of what is
+  always there; `language` is added to it, as MSG-11's data always has it.
+- **Docs**: `CHANGELOG.md` keeps every Unreleased line; the contract keeps MSG-11's section first
+  of the day, with a line on COD-8 in Spanish, then main's COD-8 section and its code-table rows.
+
+New keys (90), in `en.ts` with main's English and in `es.ts` as a draft: `line.part.firm.what.*`
+(6), `line.part.firm.measures.*` (6), `line.part.firm.named`, `line.part.firm.where`,
+`line.part.firm.point`, `line.part.firm.at.*` (16), `line.firm/<code>.*` for the six measures (36)
+and `firm/not-read` (3), `line.part.stage.firm`; `report.firm.*` (15), `report.count.firm.all|some`,
+`tool.check.firm.more|noCodeFindings`.
+
+A test in rules `result/__tests__/language.test.ts` says a `firm/corridor-width` line in Spanish:
+the message, the found with its place, the needed, the same code, `firm` and values, no word of
+approval and no placeholder left.
+
+### The ownWords guard
+
+`rules/src/result/firm.ts` and `cli/src/firm/measure.ts` are at none, and are added to the list
+held at none. Listed: `firm/standards.ts` 18 (the refusals of a firm's file, as the command
+line's), `readTools.ts` 284 → 285 (the tool's description), `distribution/listing.ts` 33 → 82
+(the plugin's four new skills, English for the agent, under "developer" with the rest of the
+listing). The ratchet moves from 1253 to 1271.
+
+### Results after 4fe29edc
+
+- `npm run build`: `dist/grid.mjs` 550,002 bytes, under main's cap of 600,000 in `grid.e2e` (raised
+  by CNT-17); the Spanish chunk 156,388 bytes. COD-8's measuring is called by every `grid check`,
+  so it is in the main file; nothing was moved and the cap was not touched.
+- `npm run typecheck`, `npm run lint`: clean.
+- All of rules `src` (COD-8's `firm.test.ts`, `contract.test.ts` among them), floorplan
+  `messages/` and `types/`, viewer `picture/__tests__/language.test.ts`: 45 files, 624 tests pass.
+- The CLI's guard, `firm/` (COD-8's `firm.test.ts`, `standards.test.ts`), `mcp/` (tools, server,
+  replay), `command/` (everyPath, grid.e2e, language.e2e), `distribution/` (COD-8's
+  `listing.test.ts`), `describe/`, `draw/`, `sheet/`, `quantities/` and the scoreboard's
+  `approvalWords.test.ts`: 78 files, 1,009 tests pass (1 skipped); `grid.e2e`'s speed test (grid
+  check under 500 ms) took 3.4 s under that load and passes alone. No expectation of main's
+  changed; main's tests pass unchanged.
+- By hand: `grid check --lang es --full` beside a firm's file of a door width and a room area says
+  "Para revisar (8): 8 hallazgos de las normas propias del estudio.", the heading "Las normas
+  propias del estudio (8), de "firm-standards.json": …", each line with its found ("0,75 m, su
+  hueco de 0,80 m menos 0,05 m de la hoja abierta y su tope; medido como …"), "Ningún hallazgo
+  fuera de las normas propias del estudio. …" and the list of the standards; without `--lang` it is
+  main's English.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (4fe29edc)
+
+25. **The ratchet was raised, 1253 to 1271**, by the 18 refusals of a firm's file
+    (`firm/standards.ts`), which stay in English as the plan's own schema refusals do. In a
+    Spanish report, `firm/not-read`'s found (why the file was not read) is that English.
+26. **"The firm" is "el estudio"** in the Spanish draft ("Las normas propias del estudio", "el
+    valor propio del estudio"), and a standard is "norma". A reviewer may prefer "despacho" or
+    "la empresa"; it is one word in `es.ts`'s `report.firm.*` and `line.firm/*` keys.
+27. **The record's `firm.heading` stays English** in every language, as data, like the codes; the
+    heading in the text is said in the language.
+28. **The main file is 550,002 bytes**, 2 bytes over the 550,000 this branch held to before CNT-17
+    raised main's cap to 600,000; the cap in force is main's.

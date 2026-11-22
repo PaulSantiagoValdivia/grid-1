@@ -13,7 +13,7 @@
  * Plain words, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, planCheckSaids, tolerance, type PlanFix } from '@ongrid/floorplan/geometry'
+import { areaText, figureText, metresText, planCheckSaids, tolerance, type PlanFix } from '@ongrid/floorplan/geometry'
 import { en, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
@@ -21,6 +21,7 @@ import { buildingKindsSaid, buildingTypeSaid, findingReadFor, type BuildingKind 
 import { saids as figureSaids } from '../checks/messages'
 import { figureNeededSaid } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
+import { FIRM_MEASURES, type FirmMeasure } from './firm'
 
 /** What a line's code is told about the thing, to word it. A text of Grid's own is a `Value`, said in the line's language. */
 export interface Subject {
@@ -75,6 +76,22 @@ export interface Subject {
   readonly group?: readonly string[]
   /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; '' when none. */
   readonly heldSaid?: Value
+  /** COD-8, on a `firm/` line: the firm's standard and what was measured for it. */
+  readonly firm?: FirmSubject
+}
+
+/** COD-8: what a `firm/` line is told: the firm's figure, from its file, and what the drawing measured. */
+export interface FirmSubject {
+  /** The firm's least size, in the measure's unit. */
+  readonly value: number
+  /** The firm's own name for the standard, or null. */
+  readonly name: string | null
+  /** The firm's file, as the report names it. */
+  readonly file: string
+  /** What the drawing measured; null when nothing could be. */
+  readonly measured: number | null
+  /** Where or between what, with the plan's names quoted (MSG-11: a sentence by key, or its text); empty when there is nothing to add. */
+  readonly said: Value
 }
 
 export type Field = 'says' | 'found' | 'needed' | 'fix'
@@ -226,6 +243,32 @@ function escapeWindowNeeded(s: Subject): Values {
   const used = figuresOf(s.finding, ['escapeOpeningMinArea', 'escapeOpeningMinAreaGrade', 'escapeOpeningMinWidth', 'escapeOpeningMinHeight'])
   return { readFor: readFor(s), figure: figureNeededSaid(said('line.part.atLeast', { what: joined(parts, 'join.comma') }), used) }
 }
+
+/**
+ * COD-8: the values of a `firm/` code's wording: the firm's figure and what was measured, to the
+ * digits that set it apart from it, in the measure's unit (`line.firm/<code>.*`); the firm's name
+ * for the standard, its file, and where it was measured. A line with nothing measured has the
+ * `none` wording.
+ */
+function firmValues(measure: FirmMeasure): (s: Subject) => Values {
+  const area = FIRM_MEASURES[measure].unit === 'm²'
+  return (s) => {
+    const f = s.firm
+    const figure = num(figureText(f?.value ?? 0))
+    const measured = f === undefined || f.measured === null ? null : num(area ? areaText(f.measured, 2, f.value) : metresText(f.measured, 2, f.value))
+    return {
+      figure,
+      ...(measured === null ? {} : { measured }),
+      what: said(`line.part.firm.what.${measure}`),
+      measures: said(`line.part.firm.measures.${measure}`),
+      named: f?.name ? said('line.part.firm.named', { name: name(f.name) }) : '',
+      file: name(f?.file ?? ''),
+      where: f?.said === undefined || f.said === '' ? '' : said('line.part.firm.where', { where: f.said })
+    }
+  }
+}
+const firmNone = (s: Subject): string => (s.firm === undefined || s.firm.measured === null ? 'none' : '')
+const firmEntry = (measure: FirmMeasure): CodeEntry => ({ values: firmValues(measure), variant: { says: firmNone, found: firmNone } })
 
 export const CODES = {
   // --- Reading: the plan could not be read, so nothing else ran ---------------------------------
@@ -390,6 +433,19 @@ export const CODES = {
     values: (s): Values => (s.also[0] === undefined ? {} : { window: name(s.also[0]) }),
     variant: { says: (s) => (s.also[0] === undefined ? '' : 'window') }
   },
+  // --- The firm's own standards (COD-8) -------------------------------------------------------
+  // Each is the firm's figure, from its file beside the plan, set against a CNT-13 measure or a
+  // room's net area. Never a code's: the needed says so, and names the file.
+  'firm/corridor-width': firmEntry('corridor_width'),
+  'firm/door-clear-width': firmEntry('door_clear_width'),
+  'firm/turning-circle': firmEntry('turning_circle'),
+  'firm/fixture-clearance': firmEntry('fixture_clearance'),
+  'firm/room-area': firmEntry('room_area'),
+  'firm/room-width': firmEntry('room_width'),
+  'firm/not-read': {
+    values: (s): Values => ({ file: s.firm === undefined ? s.label : name(s.firm.file) })
+  },
+
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {},
   'floor/empty-top': {},
@@ -623,8 +679,9 @@ export function wordLine(code: string, s: Subject, language: Language, options: 
     const key = `line.${code}.${f}${variant ? `.${variant}` : ''}`
     return Object.hasOwn(en, key) ? say(language, key as MessageKey, values, options) : null
   }
-  // The label and the check's own sentence are words, and the line's own text says them.
-  const data = Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'label' && key !== 'said'))
+  // The label and the check's own sentence are words, and the line's own text says them. A part
+  // left empty (COD-8's name and place of a firm's line) is no value.
+  const data = Object.fromEntries(Object.entries(values).filter(([key, value]) => key !== 'label' && key !== 'said' && value !== ''))
   return {
     message: entry === null ? said_ : field('says') ?? said_,
     found: entry === null ? said_ : field('found') ?? said_,

@@ -90,6 +90,7 @@ Each page answers one kind of question, so read only the one you need.
 | Call Grid as an agent: the `grid_…` tools, asking across the parts by their facts, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
 | Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, facts of your own and room numbers, wall faults, inside and outside walls, and where people's names go instead | [docs/plan-file.md](docs/plan-file.md) |
 | Keep what the person asked for beside the plan, and read each line met or missed after a change | [docs/brief.md](docs/brief.md) |
+| Set a firm's own standards, such as corridors at least 1.5 m, against its plans, apart from the code figures; the skills a firm can own | [docs/firm-standards.md](docs/firm-standards.md) |
 | Know what an area figure means: net, gross internal and gross external, and which comes first where; the room schedule and the door and window schedule | [docs/areas.md](docs/areas.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |
 | Read what `grid check` and `grid_check` return: the record and every message code | [docs/result-contract.md](docs/result-contract.md) |

@@ -32,6 +32,7 @@ import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
+import { firmForCheck } from '../firm/measure'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
@@ -328,11 +329,13 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     // MSG-11: the language asked for, else the plan's own, with its messages loaded.
     const language = await languageFor(askedLanguage(textOf(parsed, '--lang')), loaded.plan)
     const speech = language === 'en' ? {} : { language }
+    // COD-8: the firm's own standards beside the plan, when it has a file of them.
+    const firm = firmForCheck(project, planFile, loaded.plan)
     // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
     const marking = (whole: ReturnType<typeof checkPlan>, asked: MarkAsk): MarkDone =>
       inLanguage(whole.language, whole.decimal, () => markNote(project, planFile, loaded, whole, asked, asked.mark === 'seen' ? '--seen' : '--unseen'))
-    const done: MarkDone | null = ask === null ? null : marking(checkPlan(loaded, { country, ...speech }), ask)
-    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country, ...speech }), loaded, readSeen(project, planFile))
+    const done: MarkDone | null = ask === null ? null : marking(checkPlan(loaded, { country, firm, ...speech }), ask)
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country, firm, ...speech }), loaded, readSeen(project, planFile))
     if (json) io.stdout(checkJson(result, done ?? undefined))
     else {
       const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })

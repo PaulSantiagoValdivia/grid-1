@@ -20,6 +20,7 @@ import {
   coverageOnFloor,
   figureUsedSaid,
   inspectPlan,
+  isFirmLine,
   problemsIn,
   roomsLookedAt,
   FIGURE_LIMIT_KEYS,
@@ -28,14 +29,17 @@ import {
   type AppliedFigure,
   type Cause,
   type CheckCoverage,
+  type FirmInput,
+  type FirmUsed,
   type GridResult,
   type LineKind,
   type ResultLine,
   type RulesReport,
 } from '@ongrid/rules'
-import { en, english, joined, name, said, type Language, type MessageKey, type Said, type Value } from '@ongrid/floorplan/messages'
+import { en, english, joined, labelOfUse, name, said, type Language, type MessageKey, type Said, type Value } from '@ongrid/floorplan/messages'
+import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { floorOption } from './plan'
-import { inLanguage, t, tv } from './words'
+import { inLanguage, reportLanguage, t, tv } from './words'
 import type { LoadedPlan } from './plan'
 import { LANG_OPTION } from './language'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -66,6 +70,8 @@ export interface CheckRequest {
   readonly json: boolean
   /** MSG-11: the language the record and the report are written in; English when not given. Its messages must be loaded. */
   readonly language?: Language
+  /** COD-8: the firm's standards beside the plan, measured on it (`firmForCheck`). */
+  readonly firm?: FirmInput
 }
 
 export interface CheckResult {
@@ -277,7 +283,8 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const speech = language === undefined || language === 'en' ? {} : { language, ...(decimal === undefined ? {} : { decimal }) }
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
   // drops (MSG-4).
-  const result = inspectPlan(loaded.text ?? plan, { ...options, ...speech })
+  // COD-8: the firm's own standards beside the plan, when it has a file of them.
+  const result = inspectPlan(loaded.text ?? plan, { ...options, ...speech, ...(request.firm === undefined ? {} : { firm: request.firm }) })
   const whole: CheckResult = { label: result.label, ...speech, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
@@ -341,10 +348,56 @@ export const kindWord = (kind: LineKind): string => t(`report.kind.${kind}`)
 
 /** How many lines of each kind, as "2 worth a look, 1 finding". */
 export function countsText(result: GridResult): string {
+  // COD-8: how many of the findings are the firm's own, so they are never read as a code's.
+  const firm = result.lines.filter((line) => line.kind === 'finding' && isFirmLine(line)).length
+  const firmWords = (kind: LineKind): string => (kind !== 'finding' || firm === 0 ? '' : firm === result.counts[kind] ? t('report.count.firm.all') : t('report.count.firm.some', { count: firm }))
   return LINE_KINDS.filter((kind) => result.counts[kind] > 0)
-    .map((kind) => t(result.counts[kind] === 1 ? `report.count.${kind}.one` : `report.count.${kind}.many`, { count: result.counts[kind] }))
+    .map((kind) => t(result.counts[kind] === 1 ? `report.count.${kind}.one` : `report.count.${kind}.many`, { count: result.counts[kind] }) + firmWords(kind))
     .join(', ')
 }
+
+/** COD-8: the firm's lines' heading: whose figures they are, from which file, and that no place limits them. */
+export function firmHeadingText(firm: FirmUsed, notes: number): string {
+  return t('report.firm.heading', { title: said('report.firm.title'), count: notes, file: name(firm.file), note: said('report.firm.note') })
+}
+
+/** COD-8: what the firm's file gave when none of its standards gave a note, in one line; null when it gave notes, or there is no firm's file. */
+export function firmNoNoteText(result: GridResult): string | null {
+  const firm = result.firm
+  if (firm === undefined || !firm.read) return null
+  if (result.lines.some(isFirmLine)) return null
+  const looked = firm.standards.reduce((n, s) => n + s.lookedAt, 0)
+  return t('report.firm.none', {
+    title: said('report.firm.title'),
+    file: name(firm.file),
+    standards: said(firm.standards.length === 1 ? 'report.firm.standards.one' : 'report.firm.standards.many', { count: firm.standards.length }),
+    parts: said(looked === 1 ? 'report.firm.parts.one' : 'report.firm.parts.many', { count: looked }),
+    note: said('report.firm.noteFirst'),
+  })
+}
+
+/** COD-8: a room use as the firm's file names it, in the report's language when it is one of Grid's uses. */
+const useWord = (use: string, language: Language): string => (language === 'en' || !(ROOM_USES as readonly string[]).includes(use) ? use : labelOfUse(language, use as RoomUse))
+
+/** COD-8: each of the firm's standards, the figure used here, and what it looked at, for the whole report. */
+export function firmStandardsText(firm: FirmUsed): string[] {
+  const language = reportLanguage()
+  return firm.standards.map((s) =>
+    t('report.firm.standard', {
+      what: said(`line.part.firm.what.${s.measure}`),
+      named: s.name === null ? '' : said('line.part.firm.named', { name: name(s.name) }),
+      value: s.value,
+      unit: s.unit,
+      scope: s.uses.length > 0 ? said('report.firm.scope.uses', { uses: s.uses.map((use) => useWord(use, language)).join(', ') }) : s.kinds.length > 0 ? said('report.firm.scope.kinds', { kinds: s.kinds.join(', ') }) : '',
+      parts: said(s.lookedAt === 1 ? 'report.firm.parts.one' : 'report.firm.parts.many', { count: s.lookedAt }),
+      short: s.notes,
+      note: s.note === null ? '' : said('report.firm.firmNote', { note: name(s.note) }),
+    }),
+  )
+}
+
+/** COD-8: the title of the whole report's list of the firm's standards. */
+export const firmSectionTitle = (firm: FirmUsed): string => t('report.firm.section', { title: said('report.firm.title'), file: name(firm.file) })
 
 /** The thing a line is about, as `opening "d1"` or `the plan`. */
 export function thingText(line: ResultLine): string {
@@ -467,9 +520,16 @@ function reportText(result: CheckResult, floorCount: number, options: TextOption
     // seen one is under Seen with the others (MSG-10), so the heading comes before the first open one.
     const confirmSeen = record.lines.filter((line, index) => line.kind === 'to-confirm' && states[index]?.state === 'seen').length
     let confirmHeading = false
+    // COD-8: the firm's own standards under their own heading, apart from the code figures.
+    const firmOpen = record.lines.filter((line, index) => isFirmLine(line) && states[index]?.state !== 'seen').length
+    let firmHeading = false
     record.lines.forEach((line, index) => {
       const state = states[index]
       if (state?.state === 'seen') return
+      if (isFirmLine(line) && !firmHeading && record.firm !== undefined) {
+        firmHeading = true
+        lines.push('', firmHeadingText(record.firm, firmOpen))
+      }
       if (line.kind === 'to-confirm' && !confirmHeading) {
         confirmHeading = true
         lines.push('', t('report.toConfirm', { count: record.counts['to-confirm'], seen: confirmSeen > 0 ? t('report.ofThemSeen', { count: confirmSeen }) : '' }))
@@ -477,7 +537,9 @@ function reportText(result: CheckResult, floorCount: number, options: TextOption
       lines.push(...lineText(result, index, floorCount, true))
       if (state?.state === 'back') lines.push(`${line.causedBy === undefined ? '' : '    '}      ${seenBeforeText(state)}.`)
     })
+    const codeFindings = record.lines.filter((line) => line.kind === 'finding' && !isFirmLine(line)).length
     if (record.counts.finding === 0) lines.push('', t('report.noFindings'))
+    else if (codeFindings === 0) lines.push('', t('report.firm.noCodeFindings', { nothing: said('report.nothingFound') }))
     if (seen > 0) {
       lines.push('', t('report.seenHeading', { count: seen }))
       record.lines.forEach((_, index) => {
@@ -488,10 +550,15 @@ function reportText(result: CheckResult, floorCount: number, options: TextOption
     }
   }
 
+  // COD-8: a firm's file whose standards gave no note still says it was read.
+  const firmNone = firmNoNoteText(record)
+  if (firmNone !== null) lines.push('', firmNone)
   if (full) {
     lines.push(...coverageText(result))
     // MSG-3: each as the figure used here, with its basis and its status.
     if (report.figures.length > 0) lines.push(...section(t('report.figuresUsed'), report.figures.map((figure) => tv(figureUsedSaid(figure)))))
+    // COD-8: the firm's own standards, apart from the code figures: the firm's, not a code's.
+    if (record.firm !== undefined && record.firm.read) lines.push(...section(firmSectionTitle(record.firm), firmStandardsText(record.firm)))
     lines.push(...section(t('report.neverLooked'), limitsText(report.limits)))
   } else {
     // MSG-10: only the figures a line used, each still with its document, edition, clause and status.

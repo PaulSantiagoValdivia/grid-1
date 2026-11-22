@@ -10,12 +10,13 @@
 import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, limit, planFloors, planOrientation, tolerance, viewSetting, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
-import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { causeText, checkPlan, checkTitle, countsText, coverageSummary, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
+import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { askedLanguage, languageFor } from '../command/language'
 import { inLanguage, t, tv } from '../command/words'
 import { LANGUAGES, type Language } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
+import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
@@ -1811,6 +1812,7 @@ const checkTool: GridTool = {
     'Use this when you have changed the plan, or when the person asks whether the plan is drawn right or what Grid\'s checks find: problems in the drawing itself, and notes from the general checks it runs (room sizes, ways out, door swings). '
     + 'Every answer carries the label "General guidance, not your local rules". It never says a plan complies or is allowed: "is it allowed" is for the person\'s local authority, and the answer says what was not checked. '
     + 'The answer is short and about this plan: the notes, the figures they used, what each check looked at, and the notes the person set aside as seen (grid_mark_seen), each still listed under Seen; full=true adds the checks run, every figure and what these checks never look at. '
+    + 'With a firm\'s standards file beside the plan (firm-standards.json), the firm\'s own figures are set against the plan too, and their notes (firm/…) come under their own heading, apart from the code figures. '
     + 'Do not use to measure (grid_measure) or for areas (grid_areas).',
   args: {
     plan: PLAN_ARG,
@@ -1856,6 +1858,8 @@ const checkTool: GridTool = {
       })),
       // MSG-10: the person's seen mark, when the line has one: seen, or back (new again, its parts changed since).
       seen: objectSchema({ state: STRING, reason: STRING, by: STRING, at: STRING, changed: listSchema(objectSchema({ kind: STRING, id: STRING })) }, ['state', 'reason', 'by', 'at']),
+      // COD-8: on a firm/ line, the firm's own figure it was set against, from the file beside the plan.
+      firm: objectSchema({ standard: { type: 'number' }, measure: STRING, value: { type: 'number' }, unit: STRING, name: { type: ['string', 'null'] }, file: STRING }, ['standard', 'measure', 'value', 'unit', 'name', 'file']),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
     // MSG-10: how many lines are seen, the marks file beside the plan, and why it could not be read.
     seenCount: { type: 'number' },
@@ -1882,16 +1886,35 @@ const checkTool: GridTool = {
     place: { type: ['object', 'null'], properties: { country: STRING, name: STRING, from: STRING } },
     // COD-3: with no place, how many lines the US figures would have given.
     withoutPlace: objectSchema({ usLines: { type: 'number' } }, ['usLines']),
-  }),
+    // COD-8: only with a firm's standards file beside the plan: each standard, what it looked at and its notes.
+    firm: objectSchema({
+      heading: STRING,
+      file: STRING,
+      read: { type: 'boolean' },
+      standards: listSchema(objectSchema({
+        measure: STRING,
+        value: { type: 'number' },
+        unit: STRING,
+        name: { type: ['string', 'null'] },
+        note: { type: ['string', 'null'] },
+        uses: listSchema(STRING),
+        kinds: listSchema(STRING),
+        lookedAt: { type: 'number' },
+        notes: { type: 'number' },
+      }, ['measure', 'value', 'unit', 'name', 'note', 'uses', 'kinds', 'lookedAt', 'notes'])),
+    }, ['heading', 'file', 'read', 'standards']),
+  }, ['label', 'language', 'count', 'problems', 'lines', 'seenCount', 'marksFile', 'marksProblem', 'findings', 'notChecked', 'drawing', 'coverage', 'limits', 'place', 'withoutPlace']),
   async run(args, context) {
     const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
     const full = args['full'] === true
     let result
     try {
+      // COD-8: the firm's own standards beside the plan, when it has a file of them.
+      const firm = firmForCheck(project, file, loaded.plan)
       // MSG-11: the language asked for, else the plan's own, with its messages loaded.
       const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
-      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}), ...(language === 'en' ? {} : { language }) }, 'country')
+      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}), ...(firm ? { firm } : {}), ...(language === 'en' ? {} : { language }) }, 'country')
       result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
@@ -1918,12 +1941,21 @@ const checkTool: GridTool = {
       if (full) for (const rule of result.report.rules) lines.push(`  - ${ruleText(rule)}`)
       // A seen line is listed under Seen, never left out (MSG-10).
       const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
+      // COD-8: the firm's own standards under their own heading, apart from the code figures.
+      const firmOpen = open.filter((index) => isFirmLine(record.lines[index]!)).length
+      let firmHeading = false
       for (const index of open.slice(0, 12)) {
+        if (isFirmLine(record.lines[index]!) && !firmHeading && record.firm !== undefined) {
+          firmHeading = true
+          lines.push(firmHeadingText(record.firm, firmOpen))
+        }
         lines.push(toolLine(result, index))
         const state = states[index]
         if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
       }
       if (open.length > 12) lines.push(`  ${t('tool.check.more', { count: open.length - 12 })}`)
+      // COD-8: firm lines past the first 12 still have their heading, so none is read as a code's.
+      if (!firmHeading && firmOpen > 0 && record.firm !== undefined) lines.push(t('tool.check.firm.more', { heading: firmHeadingText(record.firm, firmOpen) }))
       // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
       // A seen one is under Seen with the others (MSG-10).
       const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
@@ -1947,6 +1979,10 @@ const checkTool: GridTool = {
       const callable = withCalls.filter((line) => line.calls !== undefined).length
       if (callable > 0) lines.push(callable === 1 ? t('tool.check.calls.one') : t('tool.check.calls.many', { count: callable }))
       if (record.counts.finding === 0 && record.count > 0) lines.push(t('tool.check.noFindings'))
+      else if (record.count > 0 && record.lines.every((line) => line.kind !== 'finding' || isFirmLine(line))) lines.push(t('tool.check.firm.noCodeFindings'))
+      // COD-8: a firm's file whose standards gave no note still says it was read.
+      const firmNone = firmNoNoteText(record)
+      if (firmNone !== null) lines.push(firmNone)
       if (full) {
         // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
         const rooms = result.rooms
@@ -1958,6 +1994,8 @@ const checkTool: GridTool = {
         }
         // MSG-3: each figure as the figure used here, with its basis and status.
         if (record.figures.length > 0) lines.push(t('report.section', { title: t('report.figuresUsed'), count: record.figures.length }), ...record.figures.map((figure) => `  ${tv(figureUsedSaid(figure))}`))
+        // COD-8: the firm's own standards, apart from the code figures.
+        if (record.firm !== undefined && record.firm.read) lines.push(t('report.section', { title: firmSectionTitle(record.firm), count: record.firm.standards.length }), ...firmStandardsText(record.firm).map((text) => `  ${text}.`))
         // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
         lines.push(t('tool.check.never', { count: record.limits.length }), ...limitsText(record.limits).map((limit) => `  ${limit}.`))
       } else {
@@ -1982,6 +2020,7 @@ const checkTool: GridTool = {
           limits: record.limits,
           place: record.place,
           ...(record.withoutPlace ? { withoutPlace: record.withoutPlace } : {}),
+          ...(record.firm ? { firm: record.firm } : {}),
         },
       }
     })
