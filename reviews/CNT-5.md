@@ -202,3 +202,35 @@ raised the bundle budget to 500,000 bytes (the bundle is 476,143), and the repor
 test passes. `npm run scoreboard`: "Same as the stored figures" (197, 386, 16, 2, 11; guards 735
 and 95).
 
+
+### After merging `main` at fa2f948 (SHT-4, CNT-3, MSG-10)
+
+Merge commit bf164a6. Five files conflicted; both sides were kept in each:
+
+- `docs/commands.md`: CNT-5's "kind of building when the plan does not say it" with CNT-3's lines
+  on a stated north and front.
+- `docs/result-contract.md`: every code row of both (they merged cleanly); CNT-5's changelog
+  section on top, then MSG-10's, CNT-3's and SHT-4's.
+- `packages/cli/src/describe/card.ts`: CNT-3's `northStated` and CNT-5's stated kind both decide
+  what the card says the plan does not hold.
+- `packages/cli/src/report/draft.ts`: both imports (CNT-5's `BUILDING_TYPES`, `ROOM_TENURES`,
+  `readUse`; CNT-3's `Y_AXES`); `building` and `north`/`yAxis` are both kept in a draft.
+- `packages/rules/src/result/__tests__/result.test.ts`: main's `plot` as the field Grid does not
+  read (`site` is a field now) with CNT-5's `lounge` and `balcony` as the unknown uses; the plan's
+  fields in the schema's order: `version, units, building, projectId, walls, rooms, openings,
+  floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site,
+  display, written`.
+
+The sheet's `coverage.ts` merged cleanly: CNT-3's `north` (drawn), `yAxis`, `front` and `site`
+(not shown) beside CNT-5's `building`. MSG-10's short report leaves out only the lines marked
+seen, so CNT-5's not-checked lines show in it as any other; 7718754 adds a test that an office
+plan's `grid check` and `grid_check` list both and give the reason in the counts. Two tests in
+`coverage.test.ts` needed MSG-10 and CNT-5 read together (2e02be5): the café's servery is now read
+as `retail`, a use the room-size check is not about, so the short report names no gap for it; and
+the office's list of rooms not looked at is in the full report now that the default is short.
+
+After the merge and the fix: `npm run build`, `npm run typecheck` and `npm run lint` exit 0.
+`packages/floorplan`, `packages/rules`, `packages/viewer` and `scoreboard/__tests__`: 3,739 passed,
+2 skipped, in 176 of 176 files. `packages/cli`: 1,013 passed, 1 skipped, in 66 of 66 files (before
+the fix, 2 of these failed, the two above). `npm run scoreboard`: "Same as the stored figures"
+(197, 278, 16, 5, 12; guards 735 and 95).
