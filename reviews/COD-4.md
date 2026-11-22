@@ -52,6 +52,18 @@ Added here:
 
 No test was changed or removed.
 
+## For the owner
+
+- **`grid_check` now carries the list, in its data and its text.** The card names `grid_check`
+  as a place the list should appear, and it didn't appear there at all, so I added it. The text
+  grows by nine lines on every call. If that is too much for an agent's context, the easy
+  option is to keep `limits` in the data and cut the text to one line pointing at it. That
+  change sits in one place in `readTools.ts`, with its test in `oneList.test.ts`.
+- **The wording of the two lines** is from 79ec6b0 and is unchanged: "Ceiling height is not
+  checked, in any room or under a sloping roof" and "Which walls carry load is not known: the
+  plan does not record it, so nothing here looks at structure". Both are Grid's own words and
+  cite no figure.
+
 ## Docs
 
 - `CHANGELOG.md`, Unreleased: one line.
