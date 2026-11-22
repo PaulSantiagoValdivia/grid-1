@@ -23,9 +23,16 @@ export const SHEET_COVERAGE = {
   openings: { shown: 'drawn' },
   rooms: { shown: 'drawn and tabled' },
   floors: { shown: 'a page each' },
+  stairs: { shown: 'drawn' },
   referenceImage: { shown: 'not shown', why: 'A tracing aid, not part of the building.' },
   // CNT-12: the fixtures are drawn on each floor's plan by `drawPlan`, to scale. The 3D still
   // does not show them yet, and the room table measures the rooms, which they add nothing to.
   items: { shown: 'drawn' },
+  // SHT-7: the notes, tags, symbols and the sketch are drawn on each floor's plan by `drawPlan`.
+  // The plan's title and key are not: each page has its own title, and the band under the
+  // drawing that holds them would not fit the page's box.
+  title: { shown: 'not shown', why: 'Each page has its own title, from the sheet words.' },
+  annotations: { shown: 'drawn' },
+  sketch: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>

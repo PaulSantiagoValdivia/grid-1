@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
+import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { buildingKindsText, findingReadFor } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
@@ -42,6 +42,8 @@ export interface Subject {
   readonly place?: string
   /** On a refusal: what the format wants there, in words. */
   readonly wants?: string
+  /** MSG-7: the changes to the part that would clear the line, as data. */
+  readonly fixes?: readonly PlanFix[]
   /** On a word Grid does not read (MSG-4): the word, quoted, or what it is when it is not repeated. */
   readonly word?: string
   /** On a word Grid does not read: the word Grid knows that was most likely meant. */
@@ -72,6 +74,10 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** A figure from a line's fixes (MSG-7), or null. */
+const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number | null => s.fixes?.find((f) => f[key] !== undefined)?.[key] ?? null
+/** The wall most likely meant, from a line's fixes (MSG-7). */
+const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !== undefined)?.wall ?? null
 const FAR = tolerance('farFromOrigin')
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
@@ -358,8 +364,11 @@ export const CODES = {
   },
   'opening/missing-wall': {
     says: (s) => `${s.label} is on a wall that is not in the plan`,
-    needed: fixed('the id of a wall in the plan'),
-    fix: fixed('Name a wall the plan has, letter for letter, or add the wall.')
+    needed: (s) => (meantWall(s) === null ? 'the id of a wall in the plan' : `the id of a wall in the plan, most likely ${quoted(meantWall(s)!)}`),
+    fix: (s) =>
+      meantWall(s) === null
+        ? 'Name a wall the plan has, letter for letter, or add the wall.'
+        : `Did you mean ${quoted(meantWall(s)!)}? Name it letter for letter, or add the wall.`
   },
   'opening/degenerate': {
     says: (s) => `${s.label} has no size`,
@@ -368,13 +377,26 @@ export const CODES = {
   },
   'opening/out-of-wall': {
     says: (s) => `${s.label} runs off its wall`,
-    needed: fixed("its offset and width within the wall's length"),
-    fix: fixed('Move it along the wall, or make it narrower, as the line found says.')
+    needed: (s) => {
+      const fits = [
+        fixOf(s, 'offset') === null ? null : `an offset of at most ${metresText(fixOf(s, 'offset')!)} m`,
+        fixOf(s, 'width') === null ? null : `a width of at most ${metresText(fixOf(s, 'width')!)} m at its offset`
+      ].filter((part): part is string => part !== null)
+      return fits.length === 0 ? "its offset and width within the wall's length" : fits.join(', or ')
+    },
+    fix: (s) => {
+      const fits = [
+        fixOf(s, 'offset') === null ? null : `move it to an offset of ${metresText(fixOf(s, 'offset')!)} m or less`,
+        fixOf(s, 'width') === null ? null : `make it ${metresText(fixOf(s, 'width')!)} m wide or narrower, keeping its start`
+      ].filter((part): part is string => part !== null)
+      return fits.length === 0 ? 'Move it along the wall, or make it narrower, as the line found says.' : `${fits.join(', or ').replace(/^./, (c) => c.toUpperCase())}.`
+    }
   },
   'opening/too-tall': {
     says: (s) => `${s.label} reaches above the top of its wall`,
-    needed: fixed('its sill and height together no higher than the wall'),
-    fix: fixed('Lower its height or its sill.')
+    needed: (s) =>
+      fixOf(s, 'height') === null ? 'its sill and height together no higher than the wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
+    fix: (s) => (fixOf(s, 'height') === null ? 'Lower its height or its sill.' : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, or lower its sill.`)
   },
   'opening/negative-sill': {
     says: (s) => `${s.label} has its sill below the floor`,
@@ -509,6 +531,43 @@ export const CODES = {
     fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
   },
 
+  // --- Stairs (LVL-3) --------------------------------------------------------------------------
+  'stair/unknown-floor': {
+    says: (s) => `${s.label} joins a floor the plan does not know`,
+    needed: fixed('the ids of two floors the plan has'),
+    fix: fixed("Correct its from or to to a floor id the plan's floors list.")
+  },
+  'stair/same-floor': {
+    says: (s) => `${s.label} starts and ends on one floor`,
+    needed: fixed('two different floors'),
+    fix: fixed("Make from and to the two floors it joins. A step inside a floor is a room's floorOffset.")
+  },
+  'stair/no-rise': {
+    says: (s) => `${s.label} joins floors that stand at one height`,
+    needed: fixed('two floors at different heights'),
+    fix: fixed("State the floors' elevations, or join two floors at different heights.")
+  },
+  'stair/run-too-short': {
+    says: (s) => `${s.label} has a stretch of its walking line too short for a flight`,
+    needed: fixed('stretches long enough for a tread, once the landings are taken off'),
+    fix: fixed('Lengthen the stretch, or leave out the turn.')
+  },
+  'stair/too-few-risers': {
+    says: (s) => `${s.label} states fewer risers than its flights need`,
+    needed: fixed('at least two risers on each flight'),
+    fix: fixed('State more risers, or leave the number out and Grid works it out.')
+  },
+  'stair/end-in-no-room': {
+    says: (s) => `${s.label} starts or ends in no room, so it joins nothing there`,
+    needed: fixed('each end of its walking line in a room'),
+    fix: fixed('Draw the room it starts from or arrives in, or move the end of its walking line into one.')
+  },
+  'stair/duplicate-id': {
+    says: (s) => `${s.label} shares its id with another stair`,
+    needed: fixed('an id of its own for each stair'),
+    fix: fixed('Give the second stair another id; until then it is left out.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -612,8 +671,20 @@ export const CODES = {
   'opening/door-out-above-ground': {
     says: (s) => wordingText(planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
     found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
-    needed: fixed('a way out at ground level, or stairs the plan cannot hold yet'),
+    needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
+  },
+  'room/stair-out-of-line': {
+    says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
+    found: fixed('no room used as a stair on the floor below lies under half of it'),
+    needed: fixed('the stair room over the one on the floor below'),
+    fix: fixed("Move it over the stair room below, or state the stair in the plan's stairs.")
+  },
+  'room/lift-out-of-line': {
+    says: (s) => s.finding?.message ?? `${s.label} does not line up with the lift shaft below`,
+    found: fixed('no room used as a lift on the floor below lies under half of it'),
+    needed: fixed('the shaft over the one on the floor below'),
+    fix: fixed('Move it over the lift shaft below.')
   },
   'opening/too-small-to-pass': {
     says: (s) => wordingText(planCheckWordings.openingTooSmall(s.name)),
@@ -640,7 +711,22 @@ export const CODES = {
   },
   'room/escape-window-too-small': {
     says: (s) => wordingText(figureWordings.escapeWindowTooSmall(s.name)),
-    found: (s) => `${area(s.finding?.area)} as drawn, ${metres(s.finding?.width)} wide and ${metres(s.finding?.height)} high`,
+    // MSG-7 (lab MS-13): the measure that fails first, against what it needs; the ones that pass after.
+    found: (s) => {
+      const f = s.finding
+      const minWidth = f?.figures?.find((x) => x.key === 'escapeOpeningMinWidth')?.value
+      const minHeight = f?.figures?.find((x) => x.key === 'escapeOpeningMinHeight')?.value
+      const measures = [
+        { text: `${area(f?.area)} in area`, need: f?.minimum === undefined ? null : area(f.minimum), fails: f?.area !== undefined && f.minimum !== undefined && f.area < f.minimum },
+        { text: `${metres(f?.width)} wide`, need: minWidth === undefined ? null : metres(minWidth), fails: f?.width !== undefined && minWidth !== undefined && f.width < minWidth },
+        { text: `${metres(f?.height)} high`, need: minHeight === undefined ? null : metres(minHeight), fails: f?.height !== undefined && minHeight !== undefined && f.height < minHeight }
+      ]
+      const failing = measures.filter((m) => m.fails)
+      if (failing.length === 0) return `${area(f?.area)} as drawn, ${metres(f?.width)} wide and ${metres(f?.height)} high`
+      const passing = measures.filter((m) => !m.fails)
+      const short = failing.map((m) => `${m.text}, under the ${m.need} needed`).join(', and ')
+      return passing.length === 0 ? short : `${short}; ${passing.map((m) => m.text).join(' and ')}, which ${passing.length === 1 ? 'is' : 'are'} enough`
+    },
     needed: (s) => {
       const parts = [
         s.finding?.minimum === undefined ? null : `${area(s.finding.minimum)}`,
@@ -663,9 +749,9 @@ export const CODES = {
   // --- What a check could not look at -----------------------------------------------------------
   'floor/not-checked-no-stairs': {
     says: (s) => wordingText(planCheckWordings.noStairs(s.floorName)),
-    found: fixed('a floor off the ground, and no stairs in the plan'),
-    needed: fixed('stairs, which the plan cannot hold yet'),
-    fix: fixed('Nothing to change in the plan: Grid does not yet check the way down from an upper floor.')
+    found: fixed('a floor off the ground, and no stair joining it to the ground floor'),
+    needed: fixed('a stair joining it, through the floors between, to the ground floor'),
+    fix: fixed("State the stair in the plan's stairs, or draw a room used as a stair on each floor, one over the other.")
   },
   'floor/not-checked-way-out-not-drawn': {
     says: (s) => wordingText(planCheckWordings.wayOutNotDrawn(s.floorName)),
@@ -684,6 +770,17 @@ export const CODES = {
     found: fixed('doors that cannot be drawn'),
     needed: fixed('doors that can be drawn'),
     fix: fixed('Correct the lines that leave those doors out; the routes are checked once they can be drawn.')
+  },
+  'floor/sketch-drawn-only': {
+    says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,
+    found: (s) => `${s.said} on the sketch layer (${s.names.join(', ')})`,
+    needed: fixed('nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture'),
+    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, write it as that instead; furniture and site parts will be offered the same way when Grid holds them.')
+  },
+  'plan/note-no-place': {
+    says: (s) => `Note ${s.label} names a room the plan does not have, so it is not drawn`,
+    needed: fixed('a room id from the plan, or a point (at)'),
+    fix: fixed('Name one of the plan\'s rooms by its id, or place the note at a point.')
   },
   'floor/not-checked-no-use': {
     says: (s) => wordingText(figureWordings.noUse(s.floorName, s.names.length)),

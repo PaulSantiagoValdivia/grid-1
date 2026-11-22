@@ -239,6 +239,7 @@ describe('grid check', () => {
     const lines = run.out.split('\n')
     expect(lines[0]).toBe(GENERAL_GUIDANCE_LABEL)
     // Its rooms state no use, so the two figure checks look at no room and are not listed as run (MSG-2).
+    // The plan check that stairs line up (LVL-3) looks at no room here: it has no stair room.
     expect(run.out).toContain('Checks run (4):')
     expect(run.out).toContain('No findings. That only means these checks found nothing')
     expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
@@ -436,7 +437,10 @@ describe('grid serve', () => {
 })
 
 describe('speed', () => {
-  it('answers grid check on the sample flat in under half a second (median of 7)', () => {
+  // QAR-4: a new process starts about three times slower on a Windows runner, with its virus
+  // scanner, so the budget there is a second and a half.
+  const budget = process.platform === 'win32' ? 1500 : 500
+  it(`answers grid check on the sample flat in under ${budget} ms (median of 7)`, () => {
     const times: number[] = []
     for (let i = 0; i < 7; i++) {
       const start = performance.now()
@@ -444,7 +448,7 @@ describe('speed', () => {
       times.push(performance.now() - start)
     }
     times.sort((a, b) => a - b)
-    expect(times[3]).toBeLessThan(500)
+    expect(times[3]).toBeLessThan(budget)
   }, 30_000)
 })
 
@@ -463,7 +467,9 @@ describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
-    // take the file just past 400 kB (400,863 bytes) with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(450_000)
+    // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
+    // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
+    // 463,249 bytes, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(500_000)
   })
 })

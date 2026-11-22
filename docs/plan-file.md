@@ -9,10 +9,12 @@ section explains. Rooms text, the main way to write a plan, is in
 - [What a plan file may hold](#what-a-plan-file-may-hold)
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
+- [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
+- [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
@@ -27,10 +29,11 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room or floor name, a fixture's label | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
-| walls, rooms, openings, floors or items | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
+| the points of one sketch line or shape | 2,000 | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -115,6 +118,44 @@ dividing line between them. A window gets none. In 3D, in the OBJ and glTF files
 file, the room's floor and space stand at its own level, and a raised room is solid down to the
 storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
 states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
+## Stairs that join two floors
+
+A stair is stated once, in the plan's `stairs` list, across the two floors it joins. The plan
+says what is meant and Grid works out the rest:
+
+```json
+{ "id": "s1", "name": "Main stair", "from": "ground", "to": "first", "width": 0.9, "run": [[0.6, 0.6], [0.6, 3.4]] }
+```
+
+| Field | What it states |
+|---|---|
+| `from`, `to` | The floor the walking line starts on and the floor it ends on. Either may be the higher |
+| `width` | The width of the flight, in metres |
+| `run` | The walking line, down the middle of the flight: from the stair's edge on `from` to its edge on `to`. Each point between is a turn, with a square landing as wide as the flight. A straight stair may give its two ends as `start` and `end` instead |
+| `risers` | Optional: how many risers, when the design has chosen. Unstated, Grid takes the number that brings twice the riser plus the going nearest 0.63 m |
+| `name` | Optional |
+
+From the two floors' levels (and the floor offset of the rooms the stair starts and ends in),
+Grid works out the rise, the number of risers and their height, the going and the pitch, and
+which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
+rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
+shows the stair on both floors, with a line at every riser and its walking line ending in an
+arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
+`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
+its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
+width.
+
+The way-out check follows routes up and down the stair, so an upper floor or a basement is
+checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
+the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
+draw them; where both floors have stair rooms and none lies over another, they are named as out
+of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
+`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+is said not to be checked. A stair that cannot be laid out is said and left out
+(`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
+`stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
+(`stair/end-in-no-room`, a warning).
 
 ## Floor no room claims
 
@@ -216,6 +257,47 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+
+## Writing on the drawing, and the sketch layer
+
+A plan may carry writing for its drawings (SHT-7). None of it is measured or checked, and none
+of it changes an area, a check or a wall count.
+
+- `title`: one line, drawn in the band under every floor's picture. The sheet leaves it off,
+  because each page has its own title.
+- `annotations`: notes, tags, symbols and a key. Each has an `id` and a `kind`:
+  - `note`: `text`, drawn as it is;
+  - `tag`: `text` in a box;
+  - `symbol`: `symbol`, `north` (an arrow pointing up the drawing, turned by `turn` degrees
+    counter-clockwise) or `entrance`, with `text` under it if given;
+  - `key`: the drawing's key, in the band under it. It lists only what the drawing shows: the
+    kinds of wall, windows, doors with their swing, the room uses when rooms are coloured by
+    use, each sketch category, and the marks of what went wrong.
+
+  A note, tag or symbol is placed `at` a point, `[x, y]` in metres, on its `floor` (unstated,
+  the ground floor), or in a `room`, by id, where it goes under the room's name. Both at once is
+  refused. A note in a room the plan does not have is not drawn (`plan/note-no-place`).
+- `sketch`: lines, arcs, rectangles, shapes and text, each with an `id`, a `kind`, a `category`
+  (the author's word for it: `garden`, `street`, `fence`) and a `floor` (unstated, the ground
+  floor). Each kind needs its own fields:
+
+  | Kind | Fields |
+  |---|---|
+  | `line` | `points`, two or more |
+  | `shape` | `points`, three or more, closed back to the first |
+  | `rect` | `from` and `to`, two opposite corners |
+  | `arc` | `at` (its centre), `radius`, and `start` and `end` in degrees counter-clockwise from +x; it runs counter-clockwise |
+  | `text` | `at` and `text` |
+
+  A sketch is drawn in a soft line in every plan picture, the app's 2D view and the sheet, under
+  the walls, and framed with the plan. A DXF puts each category on a layer of its own,
+  `GRID-SKETCH-` and the category in capitals. Grid never takes a sketch as a wall, a room or
+  anything it understands, and the record says so once per floor, as a line not checked
+  (`floor/sketch-drawn-only`). Where a sketch is something Grid holds, such as a fixture, write
+  it as that instead; furniture and site parts will be offered the same way once Grid holds them.
+
+A field the format does not have, on a note or a sketch item, is named like any other
+(`plan/unknown-field`). The 3D views do not show the sketch yet.
 
 ## Wall faults, each with its fix
 

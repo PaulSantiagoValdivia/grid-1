@@ -27,6 +27,11 @@ function listed(names: readonly string[]): WordingPart[] {
   return names.flatMap((text, i) => (i === 0 ? [name(text)] : [words(', '), name(text)]))
 }
 
+/** Names joined by `separator`, each a name. */
+function joinedWith(names: readonly string[], separator: string): WordingPart[] {
+  return names.flatMap((text, i) => (i === 0 ? [name(text)] : [words(separator), name(text)]))
+}
+
 /** A wording as one line of text, every name in quotes. */
 export function wordingText(parts: readonly WordingPart[]): string {
   return parts.map((part) => (part.name ? quoted(part.text) : part.text)).join('')
@@ -43,7 +48,28 @@ export const wordings = {
   noStairs: (floor: string): WordingPart[] => [
     words('The way out of '),
     name(floor),
-    words(' was not checked: the plan has no stairs')
+    words(' was not checked: no stair joins it to the ground floor')
+  ],
+  /**
+   * LVL-3: rooms used as a stair (or a lift) on one level that lie over none on the level below.
+   * `upper` and `lower` hold at least one name each; floors likewise.
+   */
+  outOfLine: (
+    kind: 'stair' | 'lift',
+    upper: readonly string[],
+    upperFloors: readonly string[],
+    lower: readonly string[],
+    lowerFloors: readonly string[]
+  ): WordingPart[] => [
+    words(kind === 'stair' ? 'The stair ' : 'The lift shaft '),
+    ...joinedWith(upper, ' and '),
+    words(' on '),
+    ...joinedWith(upperFloors, ' and '),
+    words(' does not lie over '),
+    ...joinedWith(lower, ' or '),
+    words(' on '),
+    ...joinedWith(lowerFloors, ' and '),
+    words(kind === 'stair' ? ', so it does not join the two floors' : ', so the shaft is out of line')
   ],
   wayOutNotDrawn: (floor: string): WordingPart[] => [
     words('The way out of '),
@@ -100,6 +126,7 @@ export const messages = {
   noRoute: (room: string): string => wordingText(wordings.noRoute(room)),
   noRouteToAnyDoorOut: (room: string): string => wordingText(wordings.noRouteToAnyDoorOut(room)),
   noStairs: (floor: string): string => wordingText(wordings.noStairs(floor)),
+  outOfLine: (...args: Parameters<typeof wordings.outOfLine>): string => wordingText(wordings.outOfLine(...args)),
   wayOutNotDrawn: (floor: string): string => wordingText(wordings.wayOutNotDrawn(floor)),
   cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>
     wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),

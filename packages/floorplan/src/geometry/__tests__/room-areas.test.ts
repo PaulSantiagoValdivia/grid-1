@@ -8,7 +8,7 @@ import { outline, turn, type Point } from '../../test-support/outline'
 /**
  * Rooms whose areas were worked out by hand, measured two ways: by Grid (`roomArea`) and by
  * the independent referee in `test-support/referee.ts`, which shares no code with Grid. Each
- * room is also turned by 1, 45 and 180 degrees, which must not change its area.
+ * plan is also turned by 1, 45 and 180 degrees about `PIVOT`, which must not change its area.
  *
  * Every area is the floor between the inner faces of the walls (C3). Walls are 0.2 m thick
  * unless a case says otherwise, so an inner face sits 0.1 m inside the centre line.
@@ -31,7 +31,17 @@ interface Case {
   readonly spaces: readonly Space[]
 }
 
-const ring = (points: Point[], thickness?: number[]) => (deg: number) => outline(points, { thickness, rotate: deg }).walls
+/**
+ * Every plan is turned about this point, away from the origin and from every room, so that a
+ * turn also moves the plan.
+ */
+const PIVOT: Point = [3.7, -2.3]
+const spin = ([x, y]: Point, deg: number): Point => {
+  const [dx, dy] = turn([x - PIVOT[0], y - PIVOT[1]], deg)
+  return [dx + PIVOT[0], dy + PIVOT[1]]
+}
+const ring = (points: Point[], thickness?: number[]) => (deg: number) =>
+  outline(points, { thickness }).walls.map((w) => ({ ...w, start: spin(w.start, deg), end: spin(w.end, deg) }))
 const r1 = (points: Point[]) => outline(points).room
 
 const L: Point[] = [[0, 0], [6, 0], [6, 3], [3, 3], [3, 6], [0, 6]]
@@ -48,7 +58,7 @@ const RUN: Point[] = [[0, 0], [2.5, 0], [5, 0], [5, 4], [0, 4]]
  */
 function courtyard(deg: number): Wall[] {
   const w = (id: string, start: Point, end: Point, thickness = 0.2): Wall => ({
-    id, start: turn(start, deg), end: turn(end, deg), thickness, height: 2.7, kind: 'exterior'
+    id, start: spin(start, deg), end: spin(end, deg), thickness, height: 2.7, kind: 'exterior'
   })
   return [
     w('o1', [0, 0], [8, 0]), w('o2', [8, 0], [8, 8]), w('o3', [8, 8], [0, 8]), w('o4', [0, 8], [0, 0]),
@@ -82,7 +92,7 @@ const STEPS: Point[] = [[0, 0], [6, 0], [6, 2], [4, 2], [4, 4], [2, 4], [2, 6], 
  */
 function listingFlat(deg: number): Wall[] {
   const w = (id: string, start: Point, end: Point, thickness: number): Wall => ({
-    id, start: turn(start, deg), end: turn(end, deg), thickness, height: 2.7, kind: thickness > 0.2 ? 'exterior' : 'partition'
+    id, start: spin(start, deg), end: spin(end, deg), thickness, height: 2.7, kind: thickness > 0.2 ? 'exterior' : 'partition'
   })
   return [
     w('ext-s', [-0.15, -0.15], [8.55, -0.15], 0.3),
@@ -251,7 +261,7 @@ const GRID_DISAGREES: Readonly<Record<string, string>> = {}
 describe.each(CASES)('$name', ({ name, walls, spaces }) => {
   describe.each(spaces)('room $room.id, $area m² by hand', ({ room, seed, area }) => {
     it.each(TURNS)('the referee agrees, turned %i°', (deg) => {
-      expect(enclosedArea(walls(deg), turn(seed, deg))).toBeCloseTo(area, 6)
+      expect(enclosedArea(walls(deg), spin(seed, deg))).toBeCloseTo(area, 6)
     })
 
     for (const deg of TURNS) {

@@ -42,8 +42,19 @@ export const DXF_LAYERS = {
   fixtures: 'GRID-FIXTURES',
   // HND-6: the note that says what the file leaves out of the plan. Listed only in a file that
   // leaves something out, so every other file is as it was.
-  leftOut: 'GRID-LEFT-OUT'
+  leftOut: 'GRID-LEFT-OUT',
+  // SHT-7: notes, tags and symbols' words, apart from the room labels. Listed only in a drawing
+  // that has some.
+  notes: 'GRID-NOTES'
 } as const
+
+/**
+ * SHT-7: the layer of one sketch category, `GRID-SKETCH-` and the category in capitals, every
+ * character a layer name cannot hold made a dash. Listed only in a drawing that has the category.
+ */
+export function sketchLayer(category: string): string {
+  return `GRID-SKETCH-${category.toUpperCase().replace(/[^A-Z0-9_-]/g, '-')}`
+}
 
 export type DxfLayer = (typeof DXF_LAYERS)[keyof typeof DXF_LAYERS]
 
@@ -167,7 +178,8 @@ const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['na
   'GRID-LABELS': 'CONTINUOUS',
   'GRID-DOOR-SWINGS': 'CONTINUOUS',
   'GRID-FIXTURES': 'CONTINUOUS',
-  'GRID-LEFT-OUT': 'CONTINUOUS'
+  'GRID-LEFT-OUT': 'CONTINUOUS',
+  'GRID-NOTES': 'CONTINUOUS'
 }
 
 function writeLineTypeTable(w: DxfWriter): void {
@@ -192,9 +204,13 @@ function writeLineTypeTable(w: DxfWriter): void {
 }
 
 function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
-  const names = Object.values(DXF_LAYERS).filter(
-    (name) => (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) && (name !== DXF_LAYERS.leftOut || leftOut.length > 0)
-  )
+  const shown = (name: string): boolean =>
+    (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) &&
+    (name !== DXF_LAYERS.leftOut || leftOut.length > 0) &&
+    (name !== DXF_LAYERS.notes || drawing.notes.some((note) => noteText(note) !== null))
+  // SHT-7: each sketch category on a layer of its own, after the fixed layers.
+  const sketch = [...new Set(drawing.sketch.map((item) => sketchLayer(item.category)))]
+  const names: string[] = [...Object.values(DXF_LAYERS).filter(shown), ...sketch]
 
   w.pair(0, 'SECTION')
   w.pair(2, 'TABLES')
@@ -212,7 +228,7 @@ function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftO
     // does not pick colours or line weights (see the rendering seam); the code
     // is written only because the format requires one.
     w.pair(62, 7)
-    w.pair(6, LAYER_LINE_TYPE[name])
+    w.pair(6, (LAYER_LINE_TYPE as Readonly<Record<string, string>>)[name] ?? 'CONTINUOUS')
   }
 
   w.pair(0, 'ENDTAB')
@@ -414,10 +430,29 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
     }
   }
 
+  // SHT-7: the sketch layer, each category on a layer of its own, and the notes' words.
+  for (const item of drawing.sketch) {
+    const layer = sketchLayer(item.category)
+    if (item.closed) writePolygon(w, layer, item.points)
+    else for (let i = 1; i < item.points.length; i++) writeLine(w, layer, item.points[i - 1]!, item.points[i]!)
+    if (item.arc) writeArc(w, layer, item.arc)
+    if (item.text) writeText(w, layer, item.text.at, item.text.text)
+  }
+  for (const note of drawing.notes) {
+    const text = noteText(note)
+    if (text !== null && note.at) writeText(w, DXF_LAYERS.notes, note.at, text)
+  }
   writeLeftOut(w, drawing, leftOut)
 
   writeLabel(w, drawing)
   w.pair(0, 'ENDSEC')
+}
+
+/** The words a note puts in a DXF: its text, or a symbol's name; a key has none of its own. */
+function noteText(note: PlanDrawing['notes'][number]): string | null {
+  if (note.kind === 'key') return null
+  if (note.kind === 'symbol') return note.symbol === 'north' ? 'N' : (note.text ?? note.symbol ?? null)
+  return note.text
 }
 
 export interface DxfOptions {

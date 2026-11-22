@@ -196,6 +196,60 @@ export function ballroomWithStage(offset = 0.6): FloorPlan {
   })
 }
 
+/**
+ * LVL-3, lab VE-1: a three-floor house, 6 × 4 on each floor, with the stair drawn as a room on
+ * every floor, the way agents draw it. On each floor a partition at x 4 parts a main room
+ * (x 0 to 4) from a stair room (4 to 6), with a door between them. The ground floor's front door
+ * is in the south wall of its hall. `shifted` moves the first floor's stair room (and its
+ * partition) to the west end, out of line with the stair rooms above and below. `use` is what
+ * the stair rooms are used as.
+ *
+ *   y 4 +--------------+------+
+ *       |  hall/room   d stair|
+ *   y 0 +--front-------+------+
+ *       x 0            4      6
+ */
+export function stairRoomHouse(options: { shifted?: boolean; use?: 'stair' | 'lift' } = {}): FloorPlan {
+  const floors = [
+    { id: 'ground', name: 'Ground floor', level: 0 },
+    { id: 'first', name: 'First floor', level: 1 },
+    { id: 'second', name: 'Second floor', level: 2 }
+  ]
+  const walls: Wall[] = []
+  const rooms: Room[] = []
+  const openings: Opening[] = []
+  for (const { id: f } of floors) {
+    const moved = options.shifted === true && f === 'first'
+    // The partition, and which side of it the stair room is on.
+    const x = moved ? 2 : 4
+    const on = { floor: f }
+    walls.push(
+      exterior(`${f}-s1`, [0, 0], [x, 0], on),
+      exterior(`${f}-s2`, [x, 0], [6, 0], on),
+      exterior(`${f}-e`, [6, 0], [6, 4], on),
+      exterior(`${f}-n2`, [6, 4], [x, 4], on),
+      exterior(`${f}-n1`, [x, 4], [0, 4], on),
+      exterior(`${f}-w`, [0, 4], [0, 0], on),
+      wall(`${f}-x`, [x, 0], [x, 4], on)
+    )
+    const main = { ...room(`${f}-main`, f === 'ground' ? 'Hall' : 'Room', moved ? [`${f}-s2`, `${f}-e`, `${f}-n2`, `${f}-x`] : [`${f}-s1`, `${f}-x`, `${f}-n1`, `${f}-w`], f), use: 'corridor' as const }
+    const stair = { ...room(`${f}-stair`, 'Stair', moved ? [`${f}-s1`, `${f}-x`, `${f}-n1`, `${f}-w`] : [`${f}-s2`, `${f}-e`, `${f}-n2`, `${f}-x`], f), use: options.use ?? 'stair' }
+    rooms.push(main, stair)
+    openings.push(door(`${f}-d`, `${f}-x`, 1.5))
+  }
+  openings.push(door('front', 'ground-s1', 1.5))
+  return plan({ floors, walls, rooms, openings })
+}
+
+/**
+ * LVL-3 (decided in LVL-2): the two-floor house with a stair stated once, from the hall up to
+ * the landing: 0.9 m wide, its walking line from (0.6, 0.6) to (0.6, 3.4), along the hall's west
+ * wall. The ground floor is 2.7 m high on a 0.25 m slab, so the stair climbs 2.95 m.
+ */
+export function stairHouse(): FloorPlan {
+  return { ...twoFloorHouse(), stairs: [{ id: 's1', name: 'Main stair', from: 'ground', to: 'first', width: 0.9, run: [[0.6, 0.6], [0.6, 3.4]] }] }
+}
+
 /** A copy of the plan the test can edit without touching the original. */
 export function edit(source: FloorPlan, change: (copy: FloorPlan) => void): FloorPlan {
   const copy = structuredClone(source) as FloorPlan

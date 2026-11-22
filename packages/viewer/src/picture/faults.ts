@@ -25,7 +25,7 @@ import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 
 /** What a line is about, as the result record names it. */
-export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item'
+export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair'
 
 /**
  * The part of a result line (MSG-1's `ResultLine`) a picture uses. A record's `lines` can be
@@ -185,6 +185,12 @@ function spotOf(kind: FaultThingKind, id: string, layout: FaultLayout, wall?: st
     // A fixture (CNT-12): on the middle of its outline.
     const item = drawing.items.find((i) => i.id === id)
     return item && item.outline.length > 0 ? { at: centroid(item.outline), words: true } : null
+  }
+  if (kind === 'stair') {
+    // A stair (LVL-3): at the foot of its walking line, where it is drawn on this floor.
+    const stair = drawing.stairs.find((s) => s.id === id)
+    const at = stair?.line[0]
+    return at === undefined ? null : { at, words: true }
   }
   if (kind === 'wall') {
     const wall = drawing.walls.find((w) => w.id === id)

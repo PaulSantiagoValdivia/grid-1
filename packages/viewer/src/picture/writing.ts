@@ -1,0 +1,179 @@
+/**
+ * SHT-7: writing on the drawing. The sketch layer, the notes, tags and symbols, and the band
+ * under the drawing that holds its title and its key.
+ *
+ * Where each thing is comes from the geometry core (`PlanDrawing.sketch`, `PlanDrawing.notes`)
+ * and the label placement; nothing here computes geometry of its own. A sketch is drawn as the
+ * author wrote it, in a soft line, under the walls: it is never measured or checked.
+ *
+ * Pure: no DOM, no React.
+ */
+import type { PlanDrawing, PlanNote, PlanSketch, Vec2 } from '@ongrid/floorplan/geometry'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { estimateTextWidth } from '../canvas2d/labelPlacement'
+import type { PictureKey } from './faults'
+import { wrapText } from './faults'
+import type { PlanLook } from './look'
+import { LINE_PX, TEXT_PX, USE_FILLS, lengthText } from './look'
+import type { Attrs, SvgNode } from './svgNode'
+import { el } from './svgNode'
+
+const n = (value: number): string => lengthText(value)
+const pixelGroup = (at: Vec2, mpp: number, turn = 0): string =>
+  `translate(${at.x} ${-at.y}) scale(${mpp})${turn === 0 ? '' : ` rotate(${n((-turn * 180) / Math.PI)})`}`
+
+/** The sketch layer, in the plan's order: soft lines in screen pixels, its text upright. */
+export function sketchNodes(sketch: readonly PlanSketch[], mpp: number, look: PlanLook): SvgNode[] {
+  const line: Attrs = { fill: 'none', stroke: look.labelSoft, 'stroke-width': n(LINE_PX.sketch * mpp), 'stroke-linejoin': 'round' }
+  const words: Attrs = { fill: look.labelSoft, 'font-family': look.font, 'font-size': TEXT_PX.sketch, 'text-anchor': 'middle' }
+  return sketch.map((item, index) => {
+    const attrs = { 'data-part': 'sketch', 'data-kind': item.kind, 'data-category': item.category, 'data-id': item.id, 'pointer-events': 'none' }
+    const key = `sketch:${item.id}:${index}`
+    if (item.text) {
+      return el('g', { ...attrs, transform: pixelGroup(item.text.at, mpp) }, [el('text', { dy: '4', ...words }, [item.text.text])], key)
+    }
+    if (item.arc) {
+      const { center: c, radius: r, from, to } = item.arc
+      const a = { x: c.x + r * Math.cos(from), y: -(c.y + r * Math.sin(from)) }
+      const b = { x: c.x + r * Math.cos(to), y: -(c.y + r * Math.sin(to)) }
+      // Counter-clockwise on the plan is clockwise with y flipped: sweep 0. More than half a turn is the large arc.
+      const turn = (((to - from) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+      const d = `M${n(a.x)},${n(a.y)}A${n(r)},${n(r)} 0 ${turn > Math.PI ? 1 : 0} 0 ${n(b.x)},${n(b.y)}`
+      return el('path', { ...attrs, d, ...line }, [], key)
+    }
+    const d = `M${item.points.map((p) => `${n(p.x)},${n(-p.y)}`).join('L')}${item.closed ? 'Z' : ''}`
+    return el('path', { ...attrs, d, ...line }, [], key)
+  })
+}
+
+/** How far under a room's label a note in that room sits, in pixels: below its area line. */
+const UNDER_LABEL_PX = 32
+
+/**
+ * The notes, tags and symbols, each at its place: a note in a room goes under that room's
+ * label where the label was placed (`labelAt`), else at the room's label point.
+ */
+export function noteNodes(notes: readonly PlanNote[], labelAt: ReadonlyMap<string, Vec2>, mpp: number, look: PlanLook): SvgNode[] {
+  const words: Attrs = { fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.note, 'text-anchor': 'middle' }
+  const ink: Attrs = { fill: look.label, stroke: look.paper, 'stroke-width': 1 }
+  return notes.flatMap((note, index): SvgNode[] => {
+    if (note.kind === 'key' || note.at === null) return []
+    const placed = note.room === null ? undefined : labelAt.get(note.room)
+    const at = placed ? { x: placed.x, y: placed.y } : note.at
+    const dy = placed ? UNDER_LABEL_PX : 0
+    const attrs = { 'data-part': `note-${note.kind}`, 'data-id': note.id, 'pointer-events': 'none' }
+    const key = `note:${note.id}:${index}`
+    if (note.kind === 'symbol') {
+      const shape =
+        note.symbol === 'north'
+          ? [el('path', { d: 'M0,-14L6,6L0,2L-6,6Z', ...ink }), el('text', { y: '-17', ...words }, ['N'])]
+          : [el('path', { d: 'M0,-8L8,6L-8,6Z', ...ink })]
+      const label = note.text ? [el('text', { y: '20', ...words }, [note.text])] : []
+      return [el('g', { ...attrs, transform: pixelGroup(at, mpp, note.turn) }, [...shape, ...label], key)]
+    }
+    const text = note.text ?? ''
+    if (note.kind === 'tag') {
+      const width = estimateTextWidth(text, TEXT_PX.note) + 10
+      return [
+        el('g', { ...attrs, transform: pixelGroup(at, mpp) }, [
+          el('rect', { x: n(-width / 2), y: n(dy - 11), width: n(width), height: '17', rx: '3', fill: look.paper, stroke: look.label, 'stroke-width': 1 }),
+          el('text', { y: n(dy + 2), ...words }, [text])
+        ], key)
+      ]
+    }
+    return [el('g', { ...attrs, transform: pixelGroup(at, mpp) }, [el('text', { y: n(dy), ...words }, [text])], key)]
+  })
+}
+
+/** One entry of the drawing's key: a swatch and what it stands for. */
+export interface KeyEntry {
+  readonly swatch: 'fill' | 'line' | 'dash' | 'door' | 'mark'
+  readonly color: string
+  readonly words: string
+}
+
+/** What the key lists: only what this drawing shows. */
+export function keyEntries(
+  drawing: PlanDrawing,
+  look: PlanLook,
+  shown: { readonly swings: boolean; readonly sketch: boolean; readonly uses: readonly RoomUse[]; readonly marks: boolean }
+): KeyEntry[] {
+  const entries: KeyEntry[] = []
+  const solid = drawing.walls.filter((wall) => !wall.virtual)
+  if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: 'Outside wall' })
+  if (solid.some((wall) => wall.exposure !== 'exterior')) entries.push({ swatch: 'fill', color: look.wall, words: 'Inside wall' })
+  if (drawing.walls.some((wall) => wall.virtual)) entries.push({ swatch: 'dash', color: look.virtual, words: 'Open to the next room' })
+  if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: 'Window' })
+  if (shown.swings && drawing.openings.some((o) => o.type === 'door' && o.hinge !== undefined && o.swing !== undefined)) {
+    entries.push({ swatch: 'door', color: look.wall, words: 'Door, and the way it opens' })
+  }
+  for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: `Room: ${use}` })
+  if (shown.sketch) {
+    for (const category of new Set(drawing.sketch.map((item) => item.category))) {
+      entries.push({ swatch: 'line', color: look.labelSoft, words: `Sketch: ${category}, drawn only` })
+    }
+  }
+  if (shown.marks) entries.push({ swatch: 'mark', color: look.warning, words: 'Something to look at, numbered as in the check' })
+  return entries
+}
+
+const MARGIN_PX = 16
+const LINE_PX_KEY = 18
+const SWATCH = { width: 22, height: 10 }
+
+/**
+ * The band under the drawing for its title and its key, in pixels from its top-left corner:
+ * the title on the first line, then the key's entries side by side, wrapping. Null with neither.
+ */
+export function writingBand(title: string | null, entries: readonly KeyEntry[], width: number, look: PlanLook): PictureKey | null {
+  if (title === null && entries.length === 0) return null
+  const nodes: SvgNode[] = []
+  let y = MARGIN_PX
+  if (title !== null) {
+    const lines = wrapText(title, TEXT_PX.title, Math.max(width - 2 * MARGIN_PX, 80))
+    lines.forEach((line) => {
+      y += TEXT_PX.title
+      nodes.push(el('text', { 'data-part': 'title', x: MARGIN_PX, y: n(y), fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.title }, [line]))
+      y += 6
+    })
+  }
+  if (entries.length > 0) {
+    y += 8
+    nodes.push(el('text', { 'data-part': 'key-title', x: MARGIN_PX, y: n(y + 9), fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.warning }, ['Key']))
+    let x = MARGIN_PX + 40
+    for (const entry of entries) {
+      const span = SWATCH.width + 6 + estimateTextWidth(entry.words, TEXT_PX.warning) + 18
+      if (x + span > width - MARGIN_PX && x > MARGIN_PX + 40) {
+        x = MARGIN_PX + 40
+        y += LINE_PX_KEY
+      }
+      nodes.push(el('g', { 'data-part': 'key-entry', transform: `translate(${n(x)} ${n(y)})` }, [swatchOf(entry, look), el('text', { x: SWATCH.width + 6, y: '9', fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.warning }, [entry.words])]))
+      x += span
+    }
+    y += LINE_PX_KEY
+  }
+  return { height: Math.ceil(y + MARGIN_PX / 2), nodes }
+}
+
+function swatchOf(entry: KeyEntry, look: PlanLook): SvgNode {
+  const { width: w, height: h } = SWATCH
+  switch (entry.swatch) {
+    case 'fill':
+      return el('rect', { 'data-part': 'key-swatch', x: 0, y: 0, width: w, height: h, fill: entry.color, stroke: look.labelSoft, 'stroke-width': 0.5 })
+    case 'line':
+      return el('path', { 'data-part': 'key-swatch', d: `M0,${h / 2}L${w},${h / 2}`, fill: 'none', stroke: entry.color, 'stroke-width': 1.5 })
+    case 'dash':
+      return el('path', { 'data-part': 'key-swatch', d: `M0,${h / 2}L${w},${h / 2}`, fill: 'none', stroke: entry.color, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' })
+    case 'door':
+      return el('path', { 'data-part': 'key-swatch', d: `M2,${h}L2,0A${h},${h} 0 0 1 ${h + 2},${h}`, fill: 'none', stroke: entry.color, 'stroke-width': 1 })
+    case 'mark':
+      return el('circle', { 'data-part': 'key-swatch', cx: h / 2 + 2, cy: h / 2, r: h / 2 + 1, fill: entry.color })
+  }
+}
+
+/** Two bands one over the other: `top`, then `below` moved down by its height. */
+export function stackBands(top: PictureKey | null, below: PictureKey | null): PictureKey | null {
+  if (top === null) return below
+  if (below === null) return top
+  return { height: top.height + below.height, nodes: [...top.nodes, el('g', { transform: `translate(0 ${top.height})` }, below.nodes)] }
+}

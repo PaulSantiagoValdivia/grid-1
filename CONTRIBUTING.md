@@ -19,6 +19,9 @@ npm test
 npm run check:licenses
 ```
 
+The same checks run on GitHub for every pull request, on Linux and on Windows
+([RELEASING.md](RELEASING.md#the-checks-on-github)).
+
 Use [conventional commits](https://www.conventionalcommits.org/) for commit messages. If people
 will notice your change, add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
 [RELEASING.md](RELEASING.md) says how a version is released.

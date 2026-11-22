@@ -19,6 +19,7 @@
  *
  * Pure: no DOM.
  */
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
 /** A look's colours. */
 export interface PlanLook {
@@ -93,6 +94,10 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
+  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  stair: 0.75,
+  /** How long the head of a stair's arrow is. */
+  stairArrow: 8,
   /** A fixture's symbol (CNT-12). */
   fixture: 0.75,
   doorLeaf: 1.5,
@@ -108,11 +113,31 @@ export const LINE_PX = {
   warningHalo: 4,
   /** The box round the walls of a room that could not be drawn (MSG-8). */
   undrawn: 1.5,
+  /** SHT-7: a sketch line, drawn only. */
+  sketch: 1,
   undrawnDash: [6, 4]
 } as const
 
 /** How much of the warning colour tints the box of a room that could not be drawn. */
 export const UNDRAWN_TINT = 0.1
+
+/**
+ * SHT-7: a room's fill by its use, when a drawing is coloured by use: pale, so the walls, the
+ * text and the marks stay readable on them in every look.
+ */
+export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
+  bedroom: '#dfe8f3',
+  living: '#f4ead2',
+  dining: '#f2e1d3',
+  kitchen: '#e3efd9',
+  bathroom: '#d8eeee',
+  corridor: '#ecebe6',
+  stair: '#e5e0ee',
+  // LVL-3: a lift shaft, beside the stair's colour.
+  lift: '#e0e3ec',
+  storage: '#e9e4dc',
+  other: '#f0f0ee'
+}
 
 /** Font sizes in screen pixels, from `plan.css`. */
 export const TEXT_PX = {
@@ -122,7 +147,11 @@ export const TEXT_PX = {
   roomDimension: 10,
   warning: 12,
   /** The number on a fault mark (MSG-8). */
-  faultNumber: 10
+  faultNumber: 10,
+  /** SHT-7: sketch text, notes and tags, and the title under the drawing. */
+  sketch: 11,
+  note: 12,
+  title: 18
 } as const
 
 /** A length for an attribute: short, and the same on every machine. */
@@ -138,6 +167,8 @@ export type LinePart =
   | 'jamb'
   | 'step'
   | 'fixture'
+  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  | 'stair'
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
@@ -207,6 +238,7 @@ const SCREEN_LINES: ScreenLines = {
     jamb: LINE_PX.jamb,
     step: LINE_PX.step,
     fixture: LINE_PX.fixture,
+    stair: LINE_PX.stair,
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
@@ -239,6 +271,7 @@ const PAPER_LINES: PaperLines = {
     jamb: 'fine',
     step: 'medium',
     fixture: 'finest',
+    stair: 'finest',
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',
