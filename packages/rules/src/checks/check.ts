@@ -10,11 +10,12 @@
 import { checkPlanSanity, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
+import { allSkipped, coverageOf, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { resolveFigure, type FigureKey } from './figures'
 import { messages, type FigureSubject } from './messages'
 import { sizeCheck } from './size'
-import type { AppliedFigure, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport } from './types'
+import type { AppliedFigure, CheckCoverage, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport } from './types'
 import { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE } from './types'
 
 /** Getting out comes first in the list: exit findings, then escape openings, then sizes. */
@@ -61,9 +62,6 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     'habitable-room-area': minRoomArea !== null,
     'escape-opening': hasEscapeFigures(escape)
   }
-  const applied = FIGURE_RULES.flatMap((rule) => RULE_FIGURES[rule.id].flatMap((key) => resolve(key) ?? []))
-  const basis = basisOf(applied)
-
   const base = checkPlanSanity(plan)
   const floors = planFloors(plan)
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
@@ -72,19 +70,44 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
 
   const findings: RuleFinding[] = [...base.findings]
   const notChecked: NotChecked[] = []
+  // MSG-2: what each figure check looked at, floor by floor.
+  const scopes: Record<FigureRuleId, [string, FloorScope][]> = { 'habitable-room-area': [], 'escape-opening': [] }
+  const read = new Map<string, ReturnType<typeof drawable>>()
   for (const floor of floors) {
     const floorName = floor.name || floor.id
-    const { storey, leftOut } = drawable(planForFloor(plan, floor.id))
+    const drawn = drawable(planForFloor(plan, floor.id))
+    read.set(floor.id, drawn)
+    const { storey, leftOut } = drawn
     // The plan checks' notices for this floor first, then this floor's own.
     notChecked.push(...base.notChecked.filter((notice) => notice.floor === floor.id))
     // Escape openings don't need stairs: every floor up to the third storey is checked.
-    findings.push(...escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape))
+    const escapes = escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape)
+    findings.push(...escapes.findings)
+    if (ran['escape-opening']) {
+      scopes['escape-opening'].push([floor.id, escapes.scope])
+      // Above the third storey the figures here stop: said, never passed in silence (CH-4).
+      const above = escapes.scope.skipped.above_escape_storeys ?? []
+      if (above.length > 0) {
+        notChecked.push({
+          reason: 'above_escape_storeys',
+          floor: floor.id,
+          rooms: [...above],
+          openings: [],
+          message: messages.aboveEscapeStoreys(floorName, above.length)
+        })
+      }
+    } else scopes['escape-opening'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
     if (minRoomArea !== null) {
       // Sizes don't need stairs either: every floor is checked.
       const sizes = sizeCheck(storey, leftOut.rooms, floor.id, floorName, roomName, minRoomArea)
       findings.push(...sizes.findings)
       notChecked.push(...sizes.notChecked)
-    }
+      scopes['habitable-room-area'].push([floor.id, sizes.scope])
+    } else scopes['habitable-room-area'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
+  }
+  // A plan of walls alone: no check that looks at rooms ran, and the report says so (CH-1).
+  if (plan.rooms.length === 0) {
+    notChecked.push({ reason: 'no_rooms', floor: '', rooms: [], openings: [], message: messages.noRooms() })
   }
   // A check with no figure for the place did not run: said once, about the whole plan.
   for (const rule of FIGURE_RULES) {
@@ -99,12 +122,30 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     })
   }
 
+  // Every check Grid has, with what it looked at; a check that looked at nothing is not listed as
+  // applied, nor are its figures (MSG-2).
+  const findingsOf = (ruleId: string): number => findings.filter((f) => f.ruleId === ruleId).length
+  const planScopes = planCheckScopes(plan, base, read)
+  const coverage: CheckCoverage[] = [
+    // A plan check this file does not know yet keeps no coverage, and stays listed: a test fails.
+    ...base.rules.filter((rule) => Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => coverageOf(rule, planScopes.get(rule.id) ?? [], findingsOf(rule.id))),
+    ...FIGURE_RULES.map((rule) => coverageOf(rule, scopes[rule.id], findingsOf(rule.id)))
+  ]
+  const looked = new Set([
+    ...coverage.filter((c) => c.lookedAtCount > 0).map((c) => c.ruleId),
+    ...base.rules.filter((rule) => !Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => rule.id)
+  ])
+  const applied = FIGURE_RULES.filter((rule) => ran[rule.id] && looked.has(rule.id)).flatMap((rule) =>
+    RULE_FIGURES[rule.id].flatMap((key) => resolve(key) ?? [])
+  )
+  const basis = basisOf(applied)
+
   return {
     schemaVersion: base.schemaVersion,
     basis,
     label: GENERAL_GUIDANCE_LABEL,
     ...(basis === 'local-lookup' ? { lookupNotice: LOOKUP_NOTICE } : {}),
-    rules: [...base.rules, ...FIGURE_RULES.filter((rule) => ran[rule.id])],
+    rules: [...base.rules, ...FIGURE_RULES].filter((rule) => looked.has(rule.id)),
     findings: findings.sort(
       (a, b) =>
         GROUP_OF(a.code) - GROUP_OF(b.code) ||
@@ -116,6 +157,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     ),
     notChecked,
     limits: [...base.limits, ...FIGURE_LIMITS],
-    figures: applied
+    figures: applied,
+    coverage
   }
 }

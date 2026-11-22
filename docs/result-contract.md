@@ -43,8 +43,9 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. |
 | `basis` | `general-baseline`, or `local-lookup` once a looked-up figure was applied. |
 | `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
-| `checks` | Every check that ran, with where its figures come from. Empty when the plan was refused. |
-| `figures` | Every figure a check applied, with its document, edition, clause, place, day read and status. |
+| `checks` | Every check that ran and looked at something, with where its figures come from. A check that looked at no room, floor or door is not listed (MSG-2). Empty when the plan was refused. |
+| `coverage` | What each check looked at and skipped, one entry per check Grid has, whether it ran or not. See "What each check looked at". Empty when the plan was refused. |
+| `figures` | Every figure a check applied, with its document, edition, clause, place, day read and status. The figures of a check that looked at nothing are not listed. |
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
 
 ### A line
@@ -176,9 +177,67 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
+| `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 
 A code is never reused for another meaning. Until the drawing's checks give their figures as
 data, `found` for a problem in the drawing is the check's own sentence, and figures are in it.
+
+## What each check looked at
+
+`coverage` has one entry for each check Grid has (MSG-2), in the order of `checks`, the plan
+checks first, then the figure checks, whether it ran or not:
+
+| Field | What it holds |
+|---|---|
+| `ruleId`, `title` | The check, as in `checks`. |
+| `looksAt` | What it looks at: `floor`, `room` or `door` (doors and openings). |
+| `lookedAt` | The parts it looked at, by floor: `{ floor, ids }`, the ids sorted. |
+| `lookedAtCount` | How many parts that is. |
+| `skipped` | The parts it did not look at, by floor and reason: `{ floor, ids, reason, why }`. `floor` is `""` for the whole plan. |
+| `skippedCount` | How many parts that is. |
+| `findings` | How many findings it gave. |
+
+A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
+so a record with no findings says what it is: these parts were looked at and nothing was
+found in them. A `reason` is one of:
+
+| Reason | Why |
+|---|---|
+| `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
+| `no_rooms` | no rooms on the floor |
+| `cannot_be_drawn` | could not be drawn |
+| `no_stairs` | on a floor Grid cannot follow down to the ground floor |
+| `way_out_not_drawn` | the floor's only door out leads to a space that is not drawn |
+| `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
+| `above_escape_storeys` | above the third storey, where the figures here stop |
+| `no_use` | no use stated |
+| `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
+
+Every reason but `use_not_covered` is something the check could not look at. Where a whole
+floor or plan was skipped for one of those, a `not-checked` line says so too; `coverage` holds
+the rest, room by room. `grid check` prints the count of rooms looked at by at least one check
+beside the count of lines, then each check with what it looked at and skipped; `grid_check`
+returns `coverage` and says the same counts in its text.
+
+## Numbers and their state
+
+Every area Grid gives carries a state (MSG-2, lab AA-12, AC-9), one of:
+
+- `proven`: every room it is made of was measured, and nothing in the drawing questions them.
+  A sum of no rooms is 0, and proven.
+- `not-proven`: a room it should hold could not be measured, or the drawing questions a room's
+  outline (`room/not-enclosed`, `room/space-mismatch`, `room/overlap`, `room/overlap-unknown`,
+  `room/inside-no-host`). It names those rooms.
+- `not-looked-at`: nothing it would be made of could be measured. A room that cannot be drawn
+  has no area (`net: null`), never 0.
+
+`grid_areas` gives each room its `state` and `doubts` (the codes above), and `states` for each
+figure of each floor (`net`, `byUse`, `circulation`, `grossInternal`, `grossExternal`) and for
+each total (`net`, `circulation`, `grossInternal`, `grossExternal`, `circulationShare`,
+`netToGross`). Each holds `state`, `leftOut` and `notProven`, the rooms as `{ floor, id, name }`.
+A total that left a room out names it, in `leftOut`, in its text ("not proven: leaves out
+"Kitchen", which could not be measured") and in a note. The CSV has a `state` column.
 
 ## Refusals
 
@@ -225,6 +284,20 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: what each check looked at (MSG-2)
+
+- The record adds `coverage`: for each check, the floors, rooms or doors it looked at and those
+  it skipped, with the reason and a count (lab CH-1, CH-4).
+- `checks` lists only the checks that looked at something, and `figures` only their figures. A
+  plan whose rooms state no use no longer lists the room-size and escape checks as applied.
+- Two new `not-checked` codes: `floor/not-checked-above-escape-storeys`, for the bedrooms of a
+  floor above the third storey, which the escape check used to pass in silence, and
+  `plan/not-checked-no-rooms`, for a plan with no rooms (`{}` among them).
+- `grid check` prints "Looked at by at least one check: N of M rooms" and what each check
+  looked at. `grid_check` returns `coverage`.
+- `grid_areas` marks every area and total with a state, and names the rooms a total left out.
+  See "Numbers and their state".
 
 ### 2026-11-22: MSG-18
 

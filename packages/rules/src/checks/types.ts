@@ -116,11 +116,71 @@ export type NotCheckedReason =
    * up for it, so a figure check did not run. About the whole plan.
    */
   | 'no_figures_for_place'
+  /**
+   * MSG-2 (lab CH-4): bedrooms on a floor above the third storey, where the escape figures carried
+   * here stop, so their escape openings were not checked. On that floor; its rooms are the bedrooms.
+   */
+  | 'above_escape_storeys'
+  /** MSG-2 (lab CH-1): the plan has no rooms, so no check that looks at rooms ran. About the whole plan. */
+  | 'no_rooms'
 
 export interface NotChecked extends Omit<PlanNotChecked, 'reason'> {
   readonly reason: NotCheckedReason
   /** Only on `no_figures_for_place`: the check that did not run. Optional, like `through`. */
   readonly ruleId?: string
+}
+
+/**
+ * Why a check did not look at a part (MSG-2). Two kinds: the check could not look at it
+ * (`cannot_be_drawn`, `no_stairs`, `way_out_not_drawn`, `no_use`, `no_figures_for_place`,
+ * `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is not about it
+ * (`use_not_covered`).
+ */
+export type SkipReason =
+  | 'cannot_be_drawn'
+  | 'no_stairs'
+  | 'way_out_not_drawn'
+  | 'no_use'
+  | 'no_figures_for_place'
+  | 'above_escape_storeys'
+  | 'no_rooms'
+  /** The only room on a floor off the ground: reached by a stair the plan cannot draw, so not asked for a door. */
+  | 'alone_off_ground'
+  /** The check's figure is for rooms of other uses. */
+  | 'use_not_covered'
+
+/** Parts of one floor, by id. `floor` is empty for parts of the whole plan. */
+export interface CoverageGroup {
+  readonly floor: string
+  readonly ids: readonly string[]
+}
+
+/** Parts a check did not look at, on one floor, and why. */
+export interface CoverageSkip extends CoverageGroup {
+  readonly reason: SkipReason
+  /** One wording per reason, in plain words. */
+  readonly why: string
+}
+
+/**
+ * What one check looked at in this plan (MSG-2, lab CH-1, CH-4): the parts it looked at and the
+ * parts it skipped, with the reason, each by floor. Every room of the plan is either under
+ * `lookedAt` or under `skipped` of each check that looks at rooms, so an empty list of findings
+ * can be read for what it is: these parts were looked at and nothing was found in them.
+ */
+export interface CheckCoverage {
+  readonly ruleId: string
+  readonly title: string
+  /** What the check looks at: whole floors, rooms, or doors and openings. */
+  readonly looksAt: 'floor' | 'room' | 'door'
+  readonly lookedAt: readonly CoverageGroup[]
+  /** How many parts it looked at: the ids under `lookedAt`, counted. */
+  readonly lookedAtCount: number
+  readonly skipped: readonly CoverageSkip[]
+  /** How many parts it skipped. */
+  readonly skippedCount: number
+  /** How many findings it gave. */
+  readonly findings: number
 }
 
 export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' | 'notChecked'> {
@@ -133,4 +193,9 @@ export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' 
   readonly notChecked: readonly NotChecked[]
   /** Every figure the checks applied, baseline or looked up. */
   readonly figures: readonly AppliedFigure[]
+  /**
+   * MSG-2: what each check looked at and skipped, one entry per check Grid has, in `RULES` order,
+   * whether it ran or not. `rules` lists only the checks that looked at something.
+   */
+  readonly coverage: readonly CheckCoverage[]
 }
