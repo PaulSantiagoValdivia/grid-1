@@ -579,3 +579,5 @@ The ratchet moves from 1188 to 1253.
     "cubierta de una vertiente, a dos aguas, a cuatro aguas", "SO", "O" and "NO" on the elevation
     marks, "recorrido" for a route, and "el programa de necesidades" for the brief in the
     accessibility line. All are drafts, in `docs/languages.md`'s table.
+24. **Main has moved again**, to 4fe29edc (COD-8, a firm's own standards as checks), while this
+    merge was made. It is not merged here; that is the next merge.
