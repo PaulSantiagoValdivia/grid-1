@@ -153,3 +153,11 @@ display, written`). Build (540,324 bytes), typecheck and lint clean; the affecte
 all of `packages/rules`, `packages/floorplan/src/types`, `tolerances.test.ts`,
 `scoreboard/__tests__`): 92 files, 1,239 passed and 3 skipped. The scoreboard: same as the
 stored figures.
+
+After merging `main` again at 8a43380 (HND-1): conflicts in `CHANGELOG.md` and the agents'
+changelog in `docs/result-contract.md`, both sides kept (CNT-17's entry on top). No contract
+letter clash (C13 stays) and no scoreboard file changed, so the scoreboard was not rerun. Build
+(541,843 bytes), typecheck and lint clean; the affected tests rerun, adding HND-1's
+(`packages/cli/src/export`, `everyPath.e2e`, `packages/floorplan/src/export`,
+`src/geometry/export`, `exposure`, `holes`) to the set above: 113 files, 1,765 passed and 3
+skipped.

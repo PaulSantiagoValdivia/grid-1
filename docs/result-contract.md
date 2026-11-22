@@ -561,7 +561,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
@@ -611,6 +611,21 @@ A change that would add a problem that leaves a part out is refused, and nothing
   line. `resultVersion` stays 1.
 - `@ongrid/rules` exports `confirmedFigure`, `isConfirmed` and `CONFIRMED_STATUSES`: a figure is
   confirmed only with status `checked-once` or `checked-twice` and every check by a named person.
+
+### 2026-11-22: a DXF a drafter can keep working in (HND-1)
+
+- `grid_export` adds `dxfProfile`: for a DXF, the profile file in the project folder its layers
+  and pens came from (`dxf-layers.json`), else null; the text adds `Layers and pens from
+  dxf-layers.json.` when one was used. A profile that is there and wrong is refused, naming each
+  part that is wrong (`layers.doors.colour must be a whole number from 1 to 255`); no file is
+  written. No new code in the record: it is a refusal of the tool, as an empty export is.
+- The DXF itself changed: AutoCAD 2013's version (`AC1027`) in UTF-8, in metres
+  (`$INSUNITS` 6), with doors, windows and openings as blocks, filled wall outlines, dimension
+  entities, a tag block per room and an A3 layout. The old layer names stay, with new ones beside
+  them (`GRID-WALLS-FILL`, `GRID-DOORS`, `GRID-WINDOWS`, `GRID-ROOM-TAGS`, `GRID-DIMENSIONS`,
+  `GRID-SHEET`, `GRID-VIEWPORT`); a room's name and area are attributes of its tag, no longer
+  texts on `GRID-LABELS`, which now holds the label only. A layer is listed only when something is
+  drawn on it. See [what the DXF holds](commands.md#what-the-dxf-holds-hnd-1).
 
 ### 2026-11-22: facades, and opening patterns (LVL-8)
 
