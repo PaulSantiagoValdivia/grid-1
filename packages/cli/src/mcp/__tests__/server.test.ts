@@ -71,7 +71,7 @@ describe('the tool server', () => {
     expect(replies[1]).toMatchObject({ result: { structuredContent: { net: expect.any(Number) } } })
     expect(replies[2]).toMatchObject({ result: { content: [{ type: 'text', text: 'General guidance, not your local rules\nShowing floor "ground" in 3d.' }] } })
     expect(replies[3]).toMatchObject({ result: { isError: true, content: [{ type: 'text', text: 'That floor is not in this plan. Its floors: "ground".' }] } })
-    expect((replies[4] as { result: { tools: unknown[] } }).result.tools).toHaveLength(28)
+    expect((replies[4] as { result: { tools: unknown[] } }).result.tools).toHaveLength(29)
   }, 30_000)
 
   // npm test builds the command first; the picture needs the native canvas from node_modules.

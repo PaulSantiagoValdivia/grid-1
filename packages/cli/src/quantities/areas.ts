@@ -67,7 +67,12 @@ export interface RoomArea {
    * band of height over it, and its lowest and highest height.
    */
   readonly headroom?: { readonly bands: readonly HeadroomBand[]; readonly lowest: number; readonly highest: number }
-  /** WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area is. */
+  /** CNT-8, only on a zone: the room it is part of. Measured, and in no total: its floor is its room's. */
+  readonly zoneOf?: string
+  /**
+   * WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area
+   * is. A zone's band is its own, and is added into no total (CNT-8).
+   */
   readonly sureness?: AreaSureness
 }
 
@@ -185,6 +190,9 @@ function sumSureness(rooms: readonly RoomArea[], total: number): AreaSureness | 
   const source = sure.some((room) => room.sureness!.source === 'scanned') ? 'scanned' : sure[0]!.sureness!.source
   return { source, plusMinus, percent: plusMinus === null || total <= 0 ? null : (100 * plusMinus) / total }
 }
+/** The rooms the totals count: no outside room, no zone (CNT-8), no stair room counted with the one below (SHT-11). */
+const inTotals = (room: RoomArea): boolean => !room.outside && room.zoneOf === undefined && room.countedWith === undefined
+
 const key = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
@@ -237,13 +245,21 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
         ...headroomOf(f.floor, id, net),
+        ...(figure === undefined || figure.zoneOf === null ? {} : { zoneOf: figure.zoneOf }),
         ...(sureness === undefined ? {} : { sureness }),
       }
     })
-    // A stair room counted with the one below is in no total (SHT-11).
-    const inside = rooms.filter((room) => !room.outside && room.countedWith === undefined)
+    // CNT-8: a zone is in no total; its floor is counted in its room's, by the zone's use.
+    // SHT-11: nor is a stair room counted with the one below, nor the zones of such a room.
+    const inside = rooms.filter(inTotals)
+    const zones = rooms.filter((room) => !room.outside && room.zoneOf !== undefined && inside.some((r) => r.id === room.zoneOf))
+    const useOf = (room: RoomArea): string => room.use ?? (room.zoneOf === undefined ? null : rooms.find((r) => r.id === room.zoneOf)?.use) ?? NOT_SAID
     const byUseState: Record<string, AreaState> = {}
-    for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
+    const usesHere = [
+      ...inside.filter((room) => !zones.some((zone) => zone.zoneOf === room.id) || Object.hasOwn(f.byUse, useOf(room))).map(useOf),
+      ...zones.map(useOf),
+    ]
+    for (const use of [...new Set(usesHere)]) byUseState[use] = sumState([...inside, ...zones].filter((room) => useOf(room) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
     // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
     const byUse: Record<string, number> = { ...f.byUse }
@@ -301,7 +317,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
   }
   const floorBands = floors.flatMap((f) => (f.headroom ? [f.headroom] : []))
-  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter((room) => !room.outside)), net)
+  // WRT-6: the plan's band adds up the rooms its net counts, so no zone's band (CNT-8) and no
+  // stair room's counted with the one below (SHT-11) is added twice.
+  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter(inTotals)), net)
   return {
     floors,
     net,

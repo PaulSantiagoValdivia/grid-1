@@ -318,3 +318,57 @@ until then). `docs/commands.md` says how the quantities are taken under a roof.
 
 `scoreboard/current.json` merged on its own: turns 16 → 18 from main (WRT-8), checks fed 15 → 16
 from LVL-6.
+
+## After merging main at d058d4d
+
+`main` moved on to d058d4d, which brings the two fixes to MSG-5's cause tests (73d0af3,
+7b90435), CNT-8 (zones inside one room) and BRF-1 (the brief beside the plan). Merged into the
+branch after the merge at 0477e96. Nothing was pushed and `main` was not touched.
+
+### The conflicts and how each was resolved
+
+Both sides kept whole in every file.
+
+- **`CHANGELOG.md`**: LVL-6's line, then BRF-1's.
+- **`docs/result-contract.md`**: LVL-6's changelog entry, then BRF-1's and CNT-8's. The code table
+  merged on its own (`room/zone-not-in-room` beside LVL-6's three codes).
+- **`docs/plan-file.md`**: the id limit's row names both a rooflight (LVL-6) and the room a zone is
+  part of (CNT-8).
+- **`packages/cli/src/mcp/readTools.ts`**: a room's `grid_areas` line says its sureness, its zone
+  (CNT-8), the stair it is counted with, then its headroom bands.
+- **`packages/cli/src/quantities/areas.ts`** (3 hunks): a room carries `headroom` and `zoneOf`
+  (and `sureness`); the plan's headroom adds up the floors', and its sureness CNT-8's `inTotals`
+  rooms. A floor's headroom already adds up only `inTotals` rooms, so a zone's bands are counted in
+  no floor's or plan's total, as its area is not.
+- **`packages/cli/src/quantities/takeoff.ts`**: CNT-8's filter (a zone is no row unless named)
+  with LVL-6's `roomTakeoff(room, ceilingOf, survey.plan)`, which measures wall faces under the
+  roof.
+- **`packages/floorplan/src/geometry/envelope.ts`**: `roomCeiling` takes LVL-6's `roof` and gives
+  CNT-8's null for a zone.
+- **`packages/floorplan/src/geometry/validate.ts`**: both imports (LVL-6's roof helpers, CNT-8's
+  `roomZones`).
+- **`packages/floorplan/src/geometry/__tests__/areas.test.ts`**: main's imports (`edit`,
+  `madeVirtual`) without `type Measure`, which LVL-6's per-floor sum no longer casts to (lint
+  refused it unused).
+
+### The checks run after this merge
+
+| Check | Result |
+|---|---|
+| `npm run build` | passed, exit 0 |
+| `npm run typecheck` | passed, every workspace, `scripts` and `scoreboard` |
+| `npm run lint` | passed after the import above, no problems |
+| `npm run check:licenses` | "Checked 363 licences in package-lock.json: none is GPL, LGPL, AGPL, MPL, EPL." |
+| The tests either side touched (main's since 0477e96: brief, edit, write, everyPath, all of `edit/__tests__`, server, tools, all of `quantities/__tests__` with LVL-6's `roofs.test.ts`, versions, areas, the diffs, zones in floorplan and rules, comparison, scoreboard causes; LVL-6's: roofs, roofs-lab, tolerances, validation, every IFC test, rooms, types, all of `packages/rules`, sheet coverage) | 77 files; 1,312 passed, 1 failed: `packages/cli/src/versions/__tests__/diff.test.ts` "names the door that now joins other rooms, and reads a split merged back as no change" (below). No IFC golden file changed; `scoreboard/__tests__/causes.test.ts` passes now, with main's fixes |
+| `npm run scoreboard` | "Same as the stored figures": rooms measured wrong 197, damage silent 278, turns 18, mistakes named 5, checks fed 16, rooms not measured 735, sound plans with a warning 95 |
+
+No second full suite was run: the one failure is main's own (below) and the affected tests pass.
+
+### For the owner (after this merge)
+
+- **One of main's tests fails at d058d4d, not this branch's.** WRT-8's `diff.test.ts` splits a
+  bedroom into a `storage` room and merges the two back with `grid edit merge` and no use; CNT-8
+  (lab AB-9) now refuses a merge of two rooms of different uses without `use` or `zones`. Neither
+  the test nor `packages/cli/src/edit`, `src/versions` or `src/command/edit.ts` differ from
+  `main`, so it fails on `main` too. Left as it is for WRT-8 or CNT-8 to settle (pass `--use
+  bedroom` in the test, most likely); nothing here was changed for it.

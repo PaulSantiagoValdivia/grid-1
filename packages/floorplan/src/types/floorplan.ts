@@ -638,6 +638,12 @@ export const RoomSchema = z.object({
   // walls, is taken off that room, so every square metre is counted once. Optional and never
   // defaulted, so a plan written before ARE-5 reads with no key added (version 1).
   inside: z.boolean().optional(),
+  // CNT-8: the room is a zone of another room on its floor, the one with this id: where you
+  // sleep, cook or sit in an open-plan room. The zone is drawn and measured, and lies inside its
+  // room on purpose: the room is measured, counted and checked as a whole, and the zone is
+  // counted in no total (`geometry/zones.ts`). Optional and never defaulted, so a plan written
+  // before CNT-8 reads with no key added (version 1).
+  partOf: text('id').pipe(z.string().min(1)).optional(),
   // ARE-10: the room's height, floor to ceiling, in metres. Optional and never defaulted, so
   // a plan written before it reads with no key added (version 1). Unstated, the room is as
   // high as the lowest solid wall round it (`roomHeight` in the command's measuring).
