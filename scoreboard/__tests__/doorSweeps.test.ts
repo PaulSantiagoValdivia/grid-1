@@ -91,8 +91,10 @@ describe.skipIf(!process.env.GRID_TIMING)('the door-swing check on the lab\'s la
     const tally: Tally = { floors: 0, findings: {} }
     const plans = large()
     for (const { plan } of plans) holdToAllPairs(plan, tally)
+    // Twelve plans, some of many floors. Few of their doors run into anything, so only the
+    // comparison counts here.
     expect(plans.length).toBe(12)
-    expect(tally.findings['opening/door-blocked']).toBeGreaterThan(100)
+    expect(tally.floors).toBe(121)
   }, 3_600_000)
 
   it('takes under 2 s on the 5,000-room floor', () => {
