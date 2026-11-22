@@ -11,6 +11,7 @@
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
 import { dot, sub, tolerance, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -25,7 +26,7 @@ type RawRecord = Record<string, unknown>
 export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall']: Opening[K] }> & { anchor?: OpeningAnchor | null }
 
 /** A change to one room. `null` takes a key out. */
-export type RoomChange = { boundary?: string[]; name?: string; use?: string | null }
+export type RoomChange = { boundary?: string[]; name?: string; use?: string | null; properties?: Readonly<Record<string, string | number | boolean>> }
 
 /** What a change does, by id. */
 export interface Patch {
@@ -76,6 +77,20 @@ function merged(record: RawRecord, change: Readonly<Record<string, unknown>>): R
     else next[key] = value
   }
   return next
+}
+
+/**
+ * The plan as Grid reads it after the patch (WRT-6). A wall the patch adds is written as its file
+ * will hold it, which may leave out its height; here it is read as the file will be, its floor's
+ * height or the default filled in, so the checks and the answer measure what the plan will be.
+ */
+export function readingAfter(plan: FloorPlan, patch: Patch): FloorPlan {
+  const read = (wall: RawRecord): RawRecord => {
+    const parsed = FloorPlanSchema.safeParse({ version: '1', walls: [wall], ...(plan.floors !== undefined ? { floors: plan.floors } : {}) })
+    return parsed.success ? (parsed.data.walls[0] as unknown as RawRecord) : wall
+  }
+  const reading = patch.addWalls === undefined ? patch : { ...patch, addWalls: patch.addWalls.map(read) }
+  return applyPatch(plan as unknown as RawRecord, reading) as unknown as FloorPlan
 }
 
 /** Applies a patch to a plan's JSON, the file's own or Grid's reading of it, without changing anything else. */

@@ -10,6 +10,7 @@
 
 import type {
   FindingCode as PlanFindingCode,
+  HeldFinding,
   NotChecked as PlanNotChecked,
   NotCheckedReason as PlanNotCheckedReason,
   RuleCitation,
@@ -136,18 +137,23 @@ export type NotCheckedReason =
    */
   | 'not_for_building'
 
-export interface NotChecked extends Omit<PlanNotChecked, 'reason'> {
+export interface NotChecked extends Omit<PlanNotChecked, 'reason' | 'held'> {
   readonly reason: NotCheckedReason
   /** Only on `no_figures_for_place` and `not_for_building`: the check that did not run. Optional, like `through`. */
   readonly ruleId?: string
+  /**
+   * MSG-5, only on `cannot_be_drawn`: the findings held back because they rest on a part that
+   * could not be drawn, the figure checks' among them, each with the parts it waits for.
+   */
+  readonly held?: readonly HeldFinding<RuleFinding>[]
   /** Only on `not_for_building`: the kind of building the plan says it, or the floor, is. */
   readonly building?: BuildingType
 }
 
 /**
  * Why a check did not look at a part (MSG-2). Two kinds: the check could not look at it
- * (`cannot_be_drawn`, `no_stairs`, `way_out_not_drawn`, `no_use`, `no_figures_for_place`,
- * `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is not about it
+ * (`cannot_be_drawn`, `waits_for_part`, `no_stairs`, `way_out_not_drawn`, `no_use`,
+ * `no_figures_for_place`, `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is not about it
  * (`use_not_covered`).
  */
 export type SkipReason =
@@ -158,10 +164,17 @@ export type SkipReason =
   | 'no_figures_for_place'
   | 'above_escape_storeys'
   | 'no_rooms'
+  /**
+   * MSG-5: the check looked, but its finding rests on a part that could not be drawn, so it was
+   * held back (`NotChecked.held`).
+   */
+  | 'waits_for_part'
   /** The only room on a floor off the ground: reached by a stair the plan cannot draw, so not asked for a door. */
   | 'alone_off_ground'
   /** The check's figure is for rooms of other uses. */
   | 'use_not_covered'
+  /** LVL-4: the plan states no ground level for the site, so no door or window is set against it. */
+  | 'no_ground_level'
   /** CNT-5: the plan says the building, or its floor, is a kind the check's figures were not read for. */
   | 'not_for_building'
 

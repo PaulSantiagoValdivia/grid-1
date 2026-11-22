@@ -212,6 +212,10 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'rates', call: tool('grid_takeoff', { plan: PLAN, for: 'estimate', rates: '@' }), given: asIs },
   ],
   grid_schedule: [{ arg: 'plan', call: tool('grid_schedule', { plan: '@' }), given: asIs }],
+  // CNT-9: the three tools that ask across the parts read the plan only.
+  grid_fields: [{ arg: 'plan', call: tool('grid_fields', { plan: '@' }), given: asIs }],
+  grid_find: [{ arg: 'plan', call: tool('grid_find', { plan: '@', kind: ['door'] }), given: asIs }],
+  grid_count: [{ arg: 'plan', call: tool('grid_count', { plan: '@', kind: ['room'], by: 'use' }), given: asIs }],
   grid_measure: [{ arg: 'plan', call: tool('grid_measure', { plan: '@', what: 'room', room: 'lounge' }), given: asIs }],
   grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
   grid_describe: [{ arg: 'plan', call: tool('grid_describe', { plan: '@' }), given: asIs }],
@@ -257,6 +261,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_rename_room: [
     { arg: 'plan', call: tool('grid_rename_room', { plan: '@', room: 'lounge', name: 'Lounge' }), given: asIs },
     { arg: 'out', call: tool('grid_rename_room', { plan: PLAN, room: 'lounge', name: 'Lounge', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  // WRT-6: squaring a scan reads the plan and writes it, or another file.
+  grid_square_scan: [
+    { arg: 'plan', call: tool('grid_square_scan', { plan: '@', all: true }), given: asIs },
+    { arg: 'out', call: tool('grid_square_scan', { plan: PLAN, all: true, out: '@.json' }), given: (p) => `${p}.json` },
   ],
 }
 

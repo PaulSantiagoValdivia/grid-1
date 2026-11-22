@@ -5,6 +5,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 [README](../README.md#installing-grid-in-an-agent).
 
 - [The tools](#the-tools)
+- [Asking across the parts: fields, find and count](#asking-across-the-parts-fields-find-and-count)
 - [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [What a change did](#what-a-change-did)
@@ -16,7 +17,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker and the seen mark, and last the nine that
+requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker and the seen mark, and last the ten that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
@@ -26,10 +27,13 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
 | `grid_diff` | What changed since the start marker or the last commit, by what stands where, not by ids: issues first (a door that now joins other rooms, a wall that now meets an opening, notes that came and went), the verdict room by room with how many ids were only renamed, then the changes one line each; with `rooms`, the changes outside them; with a picture unless `picture: false` (see below) |
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
-| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
-| `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); text or CSV |
+| `grid_takeoff` | Metres of wall by kind, per room floor, ceiling (with its height and lowered zones), skirting and wall face less openings, and per floor the slab and the roof over every part with nothing above, marked assumed, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
+| `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); a room's stated number and each part's facts of the person's own go with them; text or CSV |
+| `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
+| `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
+| `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; and which way each room, outside wall and window faces by the plan's north |
-| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
+| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules"; the notes the person set aside are listed under Seen |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
@@ -47,6 +51,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
 | `grid_rename_room` | Renames a room or changes its use, saying which checks now look at it |
+| `grid_square_scan` | Squares a scanned plan: turns each wall marked scanned (every wall with `all`) within about 3 degrees of the plan's main directions onto them, and says how far each wall turned and moved ([Where a value came from](plan-file.md#where-a-value-came-from)) |
 
 Every change answers with what it changed, what it guessed and what it could not keep, and
 names the plan by its path in the project, so its size does not grow with the building.
@@ -72,6 +77,44 @@ that would hold no wall, room or fixture is refused, and nothing is written.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+## Asking across the parts: fields, find and count
+
+Walls, doors, windows, rooms and floors may carry facts of the person's own: a fire rating, a
+department, a room number, a head count ([Facts of your own](plan-file.md#facts-of-your-own-and-room-numbers)).
+Three short tools ask across them, and across what Grid works out of every part (CNT-9). Each
+is one call for one request.
+
+- `grid_fields` lists what can be asked. Its `fields` are Grid's: `id`, `kind`, `floor`, a room's
+  and a floor's `name`, a room's `number` and `use`, `area` (m², net, as `grid_areas` measures it,
+  for rooms and floors), `height`, `width` and `sill` (m), a wall's `length` and `thickness` (m),
+  `wall kind` and `virtual`, an opening's `wall`, `rooms` (the rooms beside a wall, or on an
+  opening's two sides, `outside` where there is none) and a floor's `level`. Its `facts` are the
+  person's, as the plan names them: each with its type (`text`, `number`, `yes-no` or `mixed`),
+  the kinds of part that carry it, how many do, and its values.
+- `grid_find` gives the parts that meet every condition in `where`: their `ids`, and `rows` with
+  only the fields named in `fields` beside each id. "Which doors have no fire rating" is
+  `{ "kind": ["door"], "where": ["fire rating is missing"] }`.
+- `grid_count` groups the parts that meet every condition by the field or fact in `by`, and sums
+  the fields of numbers in `sum`: each group's `value`, `count`, `sums`, `missing` (how many had
+  no value to add) and `ids`, largest first and the parts that state none last, then the
+  `total`. "Area per department" is `{ "kind": ["room"], "by": "department", "sum": ["area"] }`.
+
+Both take `kind`, `floor` and `room` (the room, the walls beside it and the openings into it) to
+narrow what is looked at. A condition is one line, a field or fact and a test: `is missing`,
+`is set`, `=` and `!=` (text in any capitals; `yes` or `no`; a list holds the value), `<`, `<=`,
+`>` and `>=` (numbers; a length may give its unit, as `width < 900 mm`), and `contains`. A part
+with no value for a field meets only `is missing`. A fact is matched whatever its capitals,
+spaces, dashes or underscores; one with the name of a field of Grid's is asked for as
+`properties.<name>`. A field or fact the plan does not have is refused with the nearest name,
+never with the word sent.
+
+Each answer carries a `view`, the arguments of `grid_view` that show it: `grid_find`'s picks its
+parts out in one colour (`highlight`, their ids), and `grid_count`'s colours each group of the
+floor by its value (`colour`, the field it grouped by), with a key. The `floor` is the one that
+holds most of them; `floors` lists every floor they are on. `grid_view` also takes either
+argument by hand. Grid checks nothing against a fact: no answer says what a fire rating or a
+head count means for the plan.
 
 ## The label, and retelling a report
 

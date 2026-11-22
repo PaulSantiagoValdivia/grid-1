@@ -10,6 +10,7 @@ import { pulseAt } from '../preview/pulse'
 import { useReducedMotion } from '../preview/useReducedMotion'
 import { Slab3D } from './Slab3D'
 import { Stair3D } from './Stair3D'
+import { Shell3D } from './Shell3D'
 import { Divider3D } from './Divider3D'
 import { RoomMarker3D } from './RoomMarker3D'
 import { buildWallGeometry, useWallGeometries } from './useWallGeometries'
@@ -40,8 +41,8 @@ interface Storey3DProps {
   /** The plan the preview shows; this storey slices its own floor out of it. */
   floorPlan: FloorPlan
   storey: StoreyLayout
-  /** The roof's height over this storey's walls, local to it, when it carries the roof. */
-  roofAt: number | null
+  /** Whether this storey draws its roof (LVL-4): when the whole building is shown. */
+  roof: boolean
   /** This floor's live build, if it has one. Its plans are already this floor's slice. */
   build: PlaybackClock<PlanBuild> | null
   colors: PlanColors3D
@@ -63,7 +64,7 @@ interface Storey3DProps {
 export function Storey3D({
   floorPlan,
   storey,
-  roofAt,
+  roof,
   build,
   colors,
   highlightRoom,
@@ -187,10 +188,7 @@ export function Storey3D({
       {scene.dividers.map((divider) => (
         <Divider3D key={`divider:${divider.wallId}`} divider={divider} color={colors.gridSection} />
       ))}
-      {roofAt !== null &&
-        scene.slabs.map((slab) => (
-          <Slab3D key={`roof:${slab.roomId}`} slab={slab} color={palette.floor} roofAt={roofAt} castShadow={shadows} />
-        ))}
+      {scene.shell !== null && <Shell3D shell={scene.shell} roof={roof} color={palette.floor} castShadow={shadows} glow={glow} />}
       {scene.slabs
         .filter((slab) => slab.roomId === highlightRoom)
         .map((slab) => (

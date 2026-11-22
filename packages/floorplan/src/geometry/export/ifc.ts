@@ -17,20 +17,34 @@
  * Coordinates are the model's own: metres, X and Y as on the plan, Z up (C4).
  * That is already a right-handed basis with Z up, so nothing is flipped. A plan
  * whose y runs down (CNT-3, C7) is written as it is, so its model is the
- * building's mirror image; `grid check` says so (`plan/y-down`).
+ * building's mirror image; `grid check` says so (`plan/y-down`). A plan at
+ * survey coordinates is moved near the origin, the move kept in the site's and
+ * the building's placements (`nearOrigin`, HND-2).
+ *
+ * HND-2: the file carries what the plan already says, in the fields IFC has for
+ * it: each space its room's number, use and net area with the rule (ARE-9,
+ * ARE-12); base quantities on walls, spaces, slabs, doors, windows and doorless
+ * openings; wall types by stated kind and thickness, each with its material;
+ * door and window styles by size. What the plan does not hold (flats, slabs,
+ * materials, opening types) is not made up: slabs Grid works out say so.
  */
 
-import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall } from '../plan'
+import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
   isDrawnWall,
   isFiniteWall,
+  roofOver,
   SLAB_THICKNESS,
   stackFloors,
   type StoreyLevel
 } from '../elevations'
+import type { MultiPolygon } from 'polygon-clipping'
+import { planEnvelope, roomCeiling } from '../envelope'
+import { multiArea, piecesAsRings, ringOf } from '../polygons'
+import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
@@ -43,7 +57,13 @@ import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
+import { roomFloorArea } from '../room'
+import { MEASURES } from '../areas'
+import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
+import { limit } from '../tolerances'
+import { area } from '../vec2'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
+import { factOf, factText, ROOM_NUMBER_FACT, type Facts } from '../../types/facts'
 import { directionOfTurn, planOrientation } from '../orientation'
 
 export interface IfcOptions {
@@ -273,11 +293,31 @@ interface Shared {
   readonly east2: number
 }
 
-/** Wall material, shared by every wall of one thickness. */
+/** One wall type: the walls of one stated kind and one thickness, with their material. */
+interface WallTypeEntry {
+  readonly kind: WallKind
+  readonly thickness: number
+  /** The layer set the type carries, and the usage its walls carry. */
+  readonly set: number
+  readonly usage: number
+  readonly walls: number[]
+}
+
+/** Wall materials and types, created on first use. */
 interface WallMaterials {
-  material: number | null
-  /** Insertion order is first use, so the output stays deterministic. */
-  readonly byThickness: Map<string, { usage: number; walls: number[] }>
+  /** One material per stated kind. */
+  readonly byKind: Map<WallKind, number>
+  /** One type per kind and thickness. Insertion order is first use, so the output stays deterministic. */
+  readonly byType: Map<string, WallTypeEntry>
+}
+
+/** Doors and windows of one type: the same kind, handing and size. */
+interface OpeningStyleEntry {
+  readonly type: 'door' | 'window'
+  readonly operation: DoorOperation | 'NOTDEFINED'
+  readonly width: number
+  readonly height: number
+  readonly fillers: number[]
 }
 
 interface Context {
@@ -285,12 +325,39 @@ interface Context {
   readonly owner: number
   readonly shared: Shared
   readonly materials: WallMaterials
-  /** Doors typed by their swing, by operation type, in the order they were written. */
-  readonly doorsByOperation: Map<DoorOperation, number[]>
+  /** Doors and windows by type (`openingStyleKey`), in the order they were first written. */
+  readonly openingStyles: Map<string, OpeningStyleEntry>
+  /** Every room's number (ARE-12), by `floor`, NUL, `id`. */
+  readonly roomNumbers: ReadonlyMap<string, RoomNumber>
   /** The GlobalId of an element of this context's floor, or of the building's. */
   guid(kind: string, id: string): string
   readonly issuer: GuidIssuer
+  /**
+   * CNT-9: the elements whose part carries facts of the person's own, in the order they were
+   * written, for one property set each at the end (`writeFacts`).
+   */
+  readonly facts: FactsOn[]
 }
+
+/** CNT-9: an element and the facts its part carries. */
+interface FactsOn {
+  readonly element: number
+  /** What the part is and its id, for the set's GlobalId: `wall`, `door`, `space`, `storey`. */
+  readonly kind: string
+  readonly id: string
+  /** The GlobalIds of the context it was written in: its floor's, or the building's. */
+  readonly guid: Context['guid']
+  readonly facts: Facts
+}
+
+/** CNT-9: notes an element whose part carries facts, for `writeFacts`. */
+function noteFacts(c: Context, element: number, kind: string, part: { readonly id: string; readonly properties?: Facts | undefined }): void {
+  if (part.properties === undefined || Object.keys(part.properties).length === 0) return
+  c.facts.push({ element, kind, id: part.id, guid: c.guid, facts: part.properties })
+}
+
+/** A floor and an id as one key: ids repeat from floor to floor. */
+const onFloorKey = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 /** The same context, issuing the identities of one floor's elements. */
 function onFloor(c: Context, floorId: string): Context {
@@ -500,11 +567,6 @@ function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
   )
 }
 
-/** The slab a floor stands on: its stated thickness, else `SLAB_THICKNESS`. */
-function slabUnder(floor: Floor): number {
-  return floor.slab !== undefined && Number.isFinite(floor.slab) && floor.slab >= 0 ? floor.slab : SLAB_THICKNESS
-}
-
 interface Storey {
   readonly id: number
   readonly placement: number
@@ -512,6 +574,8 @@ interface Storey {
   readonly elevation: number
   /** The height of its level: what spaces are extruded to. */
   readonly height: number
+  /** Its rooms' spaces, by room id, as they are written. */
+  readonly spaces: Map<string, number>
 }
 
 function writeStorey(
@@ -534,12 +598,14 @@ function writeStorey(
     en('ELEMENT'),
     real(level.floorLevel)
   )
+  noteFacts(c, id, 'storey', model.floor)
   return {
     id,
     placement: placementId,
     model,
     elevation: level.floorLevel,
-    height: level.clearHeight
+    height: level.clearHeight,
+    spaces: new Map()
   }
 }
 
@@ -589,11 +655,75 @@ function relate(c: Context, type: string, key: string, ...rest: readonly string[
   return c.w.add(type, str(c.guid(type, key)), ref(c.owner), NULL, NULL, ...rest)
 }
 
+// ---------------------------------------------------------------------------
+// Properties and base quantities (HND-2)
+// ---------------------------------------------------------------------------
+
+const label = (value: string): string => `IFCLABEL(${str(value)})`
+const identifier = (value: string): string => `IFCIDENTIFIER(${str(value)})`
+const textValue = (value: string): string => `IFCTEXT(${str(value)})`
+const booleanValue = (value: boolean): string => `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
+
+/** IfcPropertySingleValue(Name, Description, NominalValue, Unit). */
+const property = (c: Context, name: string, nominal: string): number =>
+  c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, nominal, NULL)
+
+/**
+ * A property set on one element. `key` keeps its identity and its relation's apart from every
+ * other set of the element. A `Pset_` name is the standard's, for its own properties only; a
+ * `Grid_` set is Grid's own.
+ */
+function propertySet(c: Context, key: string, name: string, properties: readonly number[], element: number): void {
+  if (properties.length === 0) return
+  const set = c.w.add('IFCPROPERTYSET', str(c.guid('pset', key)), ref(c.owner), str(name), NULL, refs(properties))
+  relate(c, 'IFCRELDEFINESBYPROPERTIES', `pset:${key}`, refs([element]), ref(set))
+}
+
+/** A base quantity: its kind, name, value in metres, m² or m³, and what it measures, when said. */
+type Quantity = readonly ['LENGTH' | 'AREA' | 'VOLUME', string, number, string?]
+
+/**
+ * A base quantity set (`Qto_…BaseQuantities`) on one element, as an IfcElementQuantity whose
+ * method is `BaseQuantities`: what a BIM tool's take-off and schedules read. A value that is not
+ * a number is left out; none is negative (IFC2x3 requires it).
+ */
+function quantitySet(c: Context, key: string, name: string, quantities: readonly Quantity[], element: number): void {
+  const written = quantities
+    .filter(([, , value]) => Number.isFinite(value))
+    .map(([kind, quantity, value, description]) =>
+      // IfcQuantityLength / Area / Volume (Name, Description, Unit, Value): the unit is the project's.
+      c.w.add(`IFCQUANTITY${kind}`, str(quantity), description === undefined ? NULL : str(description), NULL, real(Math.max(0, value)))
+    )
+  if (written.length === 0) return
+  const set = c.w.add('IFCELEMENTQUANTITY', str(c.guid('qto', key)), ref(c.owner), str(name), NULL, str('BaseQuantities'), refs(written))
+  relate(c, 'IFCRELDEFINESBYPROPERTIES', `qto:${key}`, refs([element]), ref(set))
+}
+
+/** The length round a closed ring. */
+function perimeter(ring: Ring): number {
+  let sum = 0
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!
+    const b = ring[(i + 1) % ring.length]!
+    sum += Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  return sum
+}
+
+/** A footprint's area: its outline less its holes. */
+const footprintArea = (footprint: Footprint): number =>
+  footprint.holes.reduce((sum, hole) => sum - area(hole), area(footprint.outline))
+
+/** A size in a type's name and key, in metres to the millimetre, as the estimate's keys write it (ARE-13). */
+const sizeText = (value: number): string => String(Math.round(value * 1000) / 1000)
+
 interface WallElement {
   readonly id: number
   readonly placement: number
   readonly wall: Wall
   readonly length: number
+  /** The area of its body profile, seen from above: its footprint, corners joined. */
+  readonly footprint: number
 }
 
 /**
@@ -632,18 +762,19 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
 
   const half = wall.thickness / 2
   // Local Y is the wall's normal, its left face.
-  const profile =
+  const outline: Ring | null =
     ends === undefined
+      ? null
+      : [
+          { x: -ends.start.right, y: -half },
+          { x: axis.length + ends.end.right, y: -half },
+          { x: axis.length + ends.end.left, y: half },
+          { x: -ends.start.left, y: half }
+        ]
+  const profile =
+    outline === null
       ? rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
-      : footprintProfile(c, {
-          outline: [
-            { x: -ends.start.right, y: -half },
-            { x: axis.length + ends.end.right, y: -half },
-            { x: axis.length + ends.end.left, y: half },
-            { x: -ends.start.left, y: half }
-          ],
-          holes: []
-        })
+      : footprintProfile(c, { outline, holes: [] })
   const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
   const shape = productShape(c, [axisRepresentation, body])
 
@@ -660,40 +791,76 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   )
 
   writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
-  associateWallMaterial(c, wall, id)
-  return { id, placement: wallPlacement, wall, length: axis.length }
+  typeWall(c, wall, id)
+  noteFacts(c, id, 'wall', wall)
+  const footprint = outline === null ? axis.length * wall.thickness : area(outline)
+  return { id, placement: wallPlacement, wall, length: axis.length, footprint }
 }
+
+/**
+ * HND-2: `Qto_WallBaseQuantities`, from the wall as written: its axis length, thickness and
+ * height, the footprint of its body (corners joined, SHT-2), its side along the axis, and its
+ * volume, each less the openings written in it (their width by height, through its thickness).
+ */
+function writeWallQuantities(c: Context, element: WallElement, openings: readonly Opening[]): void {
+  const { wall, length, footprint } = element
+  const holes = openings.reduce((sum, opening) => sum + opening.width * opening.height, 0)
+  const side = length * wall.height
+  const volume = footprint * wall.height
+  quantitySet(c, `wall:${wall.id}`, 'Qto_WallBaseQuantities', [
+    ['LENGTH', 'Length', length, 'Along its axis, from start to end.'],
+    ['LENGTH', 'Width', wall.thickness],
+    ['LENGTH', 'Height', wall.height],
+    ['AREA', 'GrossFootprintArea', footprint, 'Its body seen from above, with its corners joined to the walls it meets.'],
+    ['AREA', 'GrossSideArea', side, 'Its length along the axis times its height, one side.'],
+    ['AREA', 'NetSideArea', side - holes, 'The gross side area less every opening written in it, at its full size.'],
+    ['VOLUME', 'GrossVolume', volume],
+    ['VOLUME', 'NetVolume', volume - holes * wall.thickness, 'The gross volume less every opening written in it, through its thickness.']
+  ], element.id)
+}
+
+/** What a wall's material and type are called, by the kind the plan states (ARE-13 prices by it too). */
+const WALL_KIND_WORDS: Readonly<Record<WallKind, string>> = {
+  exterior: 'Exterior wall',
+  interior: 'Interior wall',
+  partition: 'Partition'
+}
+
+/** The plan holds no material or construction (CNT-15 will): the type says so. */
+const WALL_TYPE_NOTE =
+  'The plan holds no material or build-up: the type is the walls of one stated kind and one thickness, with one layer named after the kind.'
+
+/** A wall's stated kind; a file read without the schema may leave it out, and the schema's default is interior. */
+const kindOf = (wall: Wall): WallKind => (wall.kind in WALL_KIND_WORDS ? wall.kind : 'interior')
 
 /**
  * IFC2x3 requires every IfcWallStandardCase to be associated with exactly one
  * IfcMaterialLayerSetUsage (its WR1), so each wall gets one: a single layer as
- * thick as the wall, in a set named after that thickness. The usage runs along
- * local Y (across the wall) with an offset of -thickness/2, which centres the
- * layer on the axis, the same band the Body profile covers (C1).
+ * thick as the wall. The usage runs along local Y (across the wall) with an
+ * offset of -thickness/2, which centres the layer on the axis, the same band the
+ * Body profile covers (C1).
  *
- * One material, and one layer set and usage per distinct thickness, shared by
- * the walls that have it. They are created on first use and the association
+ * HND-2: walls are typed by the kind the plan states and their thickness, the way
+ * the estimate groups them (`wall:exterior:0.35`, ARE-13). Each type is an
+ * IfcWallType carrying its IfcMaterialLayerSet; its walls carry that set's usage.
+ * One material per kind, named after it. All are created on first use and the
  * relations are written once at the end, so nothing is written for a plan with
  * no walls.
  */
-function associateWallMaterial(c: Context, wall: Wall, element: number): void {
+function typeWall(c: Context, wall: Wall, element: number): void {
   const { w, materials } = c
-  const key = real(wall.thickness)
+  const kind = kindOf(wall)
+  const key = `wall:${kind}:${sizeText(wall.thickness)}`
 
-  let entry = materials.byThickness.get(key)
+  let entry = materials.byType.get(key)
   if (!entry) {
-    materials.material ??= w.add('IFCMATERIAL', str('Wall'))
-    const layer = w.add(
-      'IFCMATERIALLAYER',
-      ref(materials.material),
-      real(wall.thickness),
-      NULL
-    )
-    const set = w.add(
-      'IFCMATERIALLAYERSET',
-      refs([layer]),
-      str(`Wall ${key.replace(/\.$/, '')} m`)
-    )
+    let material = materials.byKind.get(kind)
+    if (material === undefined) {
+      material = w.add('IFCMATERIAL', str(WALL_KIND_WORDS[kind]))
+      materials.byKind.set(kind, material)
+    }
+    const layer = w.add('IFCMATERIALLAYER', ref(material), real(wall.thickness), NULL)
+    const set = w.add('IFCMATERIALLAYERSET', refs([layer]), str(wallTypeName(kind, wall.thickness)))
     const usage = w.add(
       'IFCMATERIALLAYERSETUSAGE',
       ref(set),
@@ -701,14 +868,37 @@ function associateWallMaterial(c: Context, wall: Wall, element: number): void {
       en('POSITIVE'),
       real(-wall.thickness / 2)
     )
-    entry = { usage, walls: [] }
-    materials.byThickness.set(key, entry)
+    entry = { kind, thickness: wall.thickness, set, usage, walls: [] }
+    materials.byType.set(key, entry)
   }
   entry.walls.push(element)
 }
 
-function writeWallMaterialAssociations(c: Context): void {
-  for (const [key, { usage, walls }] of c.materials.byThickness) {
+const wallTypeName = (kind: WallKind, thickness: number): string => `${WALL_KIND_WORDS[kind]} ${sizeText(thickness)} m`
+
+/**
+ * Each wall type, the walls it types, and the two material associations: the layer set on the
+ * type, its usage on the walls.
+ */
+function writeWallTypes(c: Context): void {
+  for (const [key, { kind, thickness, set, usage, walls }] of c.materials.byType) {
+    // IfcWallType: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+    // HasPropertySets, RepresentationMaps, Tag, ElementType, PredefinedType.
+    const type = c.w.add(
+      'IFCWALLTYPE',
+      str(c.guid('wall-type', key)),
+      ref(c.owner),
+      str(wallTypeName(kind, thickness)),
+      str(WALL_TYPE_NOTE),
+      NULL,
+      NULL,
+      NULL,
+      str(key),
+      str(WALL_KIND_WORDS[kind]),
+      en('STANDARD')
+    )
+    relate(c, 'IFCRELDEFINESBYTYPE', key, refs(walls), ref(type))
+    relate(c, 'IFCRELASSOCIATESMATERIAL', `type:${key}`, refs([type]), ref(set))
     relate(c, 'IFCRELASSOCIATESMATERIAL', key, refs(walls), ref(usage))
   }
 }
@@ -766,38 +956,92 @@ function doorOperation(opening: Opening): DoorOperation | null {
   return hingeOnLeft ? 'SINGLE_SWING_LEFT' : 'SINGLE_SWING_RIGHT'
 }
 
-const DOOR_STYLE_NAMES: Record<DoorOperation, string> = {
-  SINGLE_SWING_LEFT: 'Single swing, left',
-  SINGLE_SWING_RIGHT: 'Single swing, right'
+const HANDING_WORDS: Record<DoorOperation | 'NOTDEFINED', string> = {
+  SINGLE_SWING_LEFT: 'single swing, left',
+  SINGLE_SWING_RIGHT: 'single swing, right',
+  NOTDEFINED: 'swing not stated'
+}
+
+const OPERATION_ORDER = { SINGLE_SWING_LEFT: 0, SINGLE_SWING_RIGHT: 1, NOTDEFINED: 2 } as const
+
+/** A door or window type's key: its kind and size, as the estimate prices it (`door:0.9x2.1`, ARE-13). */
+const styleTag = (type: 'door' | 'window', width: number, height: number): string =>
+  `${type}:${sizeText(width)}x${sizeText(height)}`
+
+function styleName(entry: OpeningStyleEntry): string {
+  const size = `${sizeText(entry.width)} x ${sizeText(entry.height)} m`
+  return entry.type === 'door' ? `Door ${size}, ${HANDING_WORDS[entry.operation]}` : `Window ${size}`
+}
+
+/** The plan holds no door or window types (CNT-14 will): the style says how Grid grouped them. */
+const STYLE_NOTE =
+  'The plan holds no door or window types: Grid groups the openings by kind, size (the hole in the wall, width by height) and, for a door, its handing.'
+
+/** Puts a door or window in its type, made on first use. */
+function typeOpening(c: Context, opening: Opening, operation: DoorOperation | null, filler: number): void {
+  const type = opening.type === 'door' ? 'door' : 'window'
+  const handing = type === 'door' ? operation ?? 'NOTDEFINED' : 'NOTDEFINED'
+  const key = `${styleTag(type, opening.width, opening.height)}:${handing}`
+  const entry = c.openingStyles.get(key)
+  if (entry) entry.fillers.push(filler)
+  else c.openingStyles.set(key, { type, operation: handing, width: opening.width, height: opening.height, fillers: [filler] })
 }
 
 /**
- * One shared IfcDoorStyle per handing, with the doors it types. Shared, because a BIM tool
- * makes one door type per style; a door that doesn't state its swing stays untyped.
+ * HND-2: one shared style per door type and per window type, with the doors or windows it types:
+ * the same size and, for a door, the same handing, since IFC2x3 keeps a door's operation on its
+ * style. Shared, because a BIM tool makes one family type per style. Doors first, then windows,
+ * each by handing, width and height.
  */
-function writeDoorStyles(c: Context): void {
-  for (const operation of ['SINGLE_SWING_LEFT', 'SINGLE_SWING_RIGHT'] as const) {
-    const doors = c.doorsByOperation.get(operation)
-    if (!doors || doors.length === 0) continue
-    // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
-    // HasPropertySets, RepresentationMaps, Tag, OperationType, ConstructionType,
-    // ParameterTakesPrecedence, Sizeable.
-    const style = c.w.add(
-      'IFCDOORSTYLE',
-      str(c.guid('door-style', operation)),
-      ref(c.owner),
-      str(DOOR_STYLE_NAMES[operation]),
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      en(operation),
-      en('NOTDEFINED'),
-      '.F.',
-      '.T.'
-    )
-    relate(c, 'IFCRELDEFINESBYTYPE', operation, refs(doors), ref(style))
+function writeOpeningStyles(c: Context): void {
+  const entries = [...c.openingStyles.entries()].sort(
+    ([, a], [, b]) =>
+      (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) ||
+      OPERATION_ORDER[a.operation] - OPERATION_ORDER[b.operation] ||
+      a.width - b.width ||
+      a.height - b.height
+  )
+  for (const [key, entry] of entries) {
+    const tag = styleTag(entry.type, entry.width, entry.height)
+    const style =
+      entry.type === 'door'
+        ? // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+          // HasPropertySets, RepresentationMaps, Tag, OperationType, ConstructionType,
+          // ParameterTakesPrecedence, Sizeable.
+          c.w.add(
+            'IFCDOORSTYLE',
+            str(c.guid('door-style', key)),
+            ref(c.owner),
+            str(styleName(entry)),
+            str(STYLE_NOTE),
+            NULL,
+            NULL,
+            NULL,
+            str(tag),
+            en(entry.operation),
+            en('NOTDEFINED'),
+            '.F.',
+            '.T.'
+          )
+        : // IfcWindowStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+          // HasPropertySets, RepresentationMaps, Tag, ConstructionType, OperationType,
+          // ParameterTakesPrecedence, Sizeable.
+          c.w.add(
+            'IFCWINDOWSTYLE',
+            str(c.guid('window-style', key)),
+            ref(c.owner),
+            str(styleName(entry)),
+            str(STYLE_NOTE),
+            NULL,
+            NULL,
+            NULL,
+            str(tag),
+            en('NOTDEFINED'),
+            en('NOTDEFINED'),
+            '.F.',
+            '.T.'
+          )
+    relate(c, 'IFCRELDEFINESBYTYPE', key, refs(entry.fillers), ref(style))
   }
 }
 
@@ -850,8 +1094,18 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   )
   relate(c, 'IFCRELVOIDSELEMENT', opening.id, ref(element.id), ref(hole))
 
-  // A plain opening only cuts the wall.
-  if (opening.type === 'opening') return null
+  // A plain opening only cuts the wall, and carries its own quantities; its facts go on the void
+  // (CNT-9).
+  if (opening.type === 'opening') {
+    noteFacts(c, hole, 'opening', opening)
+    quantitySet(c, `opening:${opening.id}`, 'Qto_OpeningElementBaseQuantities', [
+      ['LENGTH', 'Width', opening.width],
+      ['LENGTH', 'Height', opening.height],
+      ['LENGTH', 'Depth', wall.thickness],
+      ['AREA', 'Area', opening.width * opening.height]
+    ], hole)
+    return null
+  }
 
   // IFC opens a door toward its own +y, with a LEFT door's hinge at local x = 0. A door
   // that opens to the wall's right face is turned half a turn about z, from its far end, so
@@ -878,11 +1132,14 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
     real(opening.width)
   )
   relate(c, 'IFCRELFILLSELEMENT', opening.id, ref(hole), ref(filler))
-  if (operation !== null) {
-    const doors = c.doorsByOperation.get(operation)
-    if (doors) doors.push(filler)
-    else c.doorsByOperation.set(operation, [filler])
-  }
+  const size: Quantity[] = [
+    ['LENGTH', 'Width', opening.width],
+    ['LENGTH', 'Height', opening.height],
+    ['AREA', 'Area', opening.width * opening.height, 'The hole in the wall, width by height: the plan holds no frame.']
+  ]
+  quantitySet(c, `${opening.type}:${opening.id}`, opening.type === 'door' ? 'Qto_DoorBaseQuantities' : 'Qto_WindowBaseQuantities', size, filler)
+  typeOpening(c, opening, operation, filler)
+  noteFacts(c, filler, opening.type, opening)
   return filler
 }
 
@@ -910,13 +1167,18 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     bodyRepresentation(c, extrusion(c, profile, height))
   ])
 
-  return w.add(
+  // HND-2: Name is the room's number and LongName its name, the way a BIM tool reads a room's
+  // number and name; ObjectType is its use, when the plan states one. CNT-9: the number is the
+  // one the room states, else Grid's count (`shownRoomNumber`).
+  const numbered = c.roomNumbers.get(onFloorKey(storey.model.floor.id, room.id))
+  const number = numbered === undefined ? undefined : shownRoomNumber(numbered)
+  const space = w.add(
     'IFCSPACE',
     str(c.guid('space', room.id)),
     ref(c.owner),
-    str(room.name),
+    str(number ?? room.name),
     NULL,
-    NULL,
+    room.use === undefined ? NULL : str(room.use),
     ref(spacePlacement),
     ref(shape),
     str(room.name),
@@ -924,6 +1186,74 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     en('INTERNAL'),
     NULL
   )
+  writeSpaceData(c, storey, room, space, footprint, height, numbered)
+  // The stated number is a fact of the room's set too, first, as the DXF writes it.
+  const facts = room.number === undefined || factOf(room, ROOM_NUMBER_FACT) !== undefined ? room.properties : { [ROOM_NUMBER_FACT]: room.number, ...room.properties }
+  noteFacts(c, space, 'space', { id: room.id, properties: facts })
+  return space
+}
+
+/** Grid_Space's words for a room whose use the plan does not state, as the areas say it (ARE-9). */
+const USE_NOT_SAID = 'not said'
+
+const FOOTPRINT_RULE =
+  "The space's footprint: inside the faces of its walls, less its holes; a room drawn inside it is not taken off."
+
+/**
+ * HND-2: what a room is, in the fields IFC has for it. `Pset_SpaceCommon` holds its number
+ * (`Reference`: the one it states, else Grid's count, CNT-9) and its use (`Category`, when
+ * stated); `Grid_Space`, Grid's own set, holds its
+ * id, number, use and net area with the measure and the rule it follows (ARE-9's net, in Grid's
+ * words); `Qto_SpaceBaseQuantities` its height, perimeter, footprint, net area and volume.
+ */
+function writeSpaceData(
+  c: Context,
+  storey: Storey,
+  room: Room,
+  space: number,
+  footprint: Footprint,
+  height: number,
+  numbered: RoomNumber | undefined
+): void {
+  let net: number | null = null
+  try {
+    // ARE-9's net, by the one function the areas use: the outline less its holes and the rooms
+    // drawn inside it.
+    net = roomFloorArea(room, storey.model.index, footprint.outline)
+  } catch {
+    // Left unsaid: the space still carries its footprint.
+  }
+  const gross = footprintArea(footprint)
+  const rule = MEASURES.net
+
+  propertySet(c, `space:${room.id}`, 'Pset_SpaceCommon', [
+    ...(numbered === undefined ? [] : [property(c, 'Reference', identifier(shownRoomNumber(numbered)))]),
+    ...(room.use === undefined ? [] : [property(c, 'Category', label(room.use))])
+  ], space)
+
+  propertySet(c, `grid-space:${room.id}`, 'Grid_Space', [
+    property(c, 'Id', identifier(room.id)),
+    // CNT-9: a number the room states is text, as the plan gives it; Grid's count an integer.
+    ...(numbered === undefined
+      ? []
+      : [property(c, 'Number', numbered.stated === null ? `IFCINTEGER(${int(numbered.number)})` : label(numbered.stated))]),
+    property(c, 'Use', label(room.use ?? USE_NOT_SAID)),
+    ...(net === null
+      ? []
+      : [
+          property(c, 'Area', `IFCAREAMEASURE(${real(net)})`),
+          property(c, 'AreaMeasure', label(rule.name)),
+          property(c, 'AreaRule', textValue(rule.measures))
+        ])
+  ], space)
+
+  quantitySet(c, `space:${room.id}`, 'Qto_SpaceBaseQuantities', [
+    ['LENGTH', 'Height', height],
+    ['LENGTH', 'GrossPerimeter', perimeter(footprint.outline)],
+    ['AREA', 'GrossFloorArea', gross, FOOTPRINT_RULE],
+    ...(net === null ? [] : [['AREA', 'NetFloorArea', net, rule.measures] as const]),
+    ['VOLUME', 'GrossVolume', gross * height]
+  ], space)
 }
 
 type Ring = readonly { readonly x: number; readonly y: number }[]
@@ -963,82 +1293,278 @@ function footprintProfile(c: Context, footprint: Footprint): number {
 type SlabKind = 'FLOOR' | 'BASESLAB' | 'ROOF'
 
 /**
- * A slab under or over a room, as an IfcSlab extruded `thickness` up from
- * `bottom` (relative to its storey). It covers the room's footprint only: slabs
- * under walls wait for a building outline, the same limit the 3D view has.
+ * How thick a ceiling is drawn. IFC has no ceiling without a body; a thin board over the room,
+ * its underside at the ceiling's height, is enough for a viewer to show it. Not a figure of the
+ * building: the plan states no ceiling build-up.
  */
+const CEILING_DEPTH = 0.02
+
+/** An outline's pieces, each extruded `thickness` up from the element's placement, as one body. */
+function piecesShape(c: Context, pieces: MultiPolygon, thickness: number): number | null {
+  const solids = piecesAsRings(pieces)
+    .filter((piece) => piece.outline.length >= 3)
+    .map((piece) => extrusion(c, footprintProfile(c, piece), thickness))
+  if (solids.length === 0) return null
+  return productShape(c, [
+    c.w.add('IFCSHAPEREPRESENTATION', ref(c.shared.bodyContext), str('Body'), str('SweptSolid'), refs(solids))
+  ])
+}
+
+/** An IfcSlab over `pieces`, extruded `thickness` up from `bottom` (relative to its storey). */
 function writeSlab(
   c: Context,
   storey: Storey,
-  room: Room,
-  footprint: Footprint,
+  key: readonly [string, string],
+  name: string,
+  pieces: MultiPolygon,
   kind: SlabKind,
   bottom: number,
-  thickness: number
-): number {
-  const slabPlacement = placement(c.w, storey.placement, [0, 0, bottom])
-  const profile = footprintProfile(c, footprint)
-  const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, thickness))
-  ])
-  const roof = kind === 'ROOF'
+  thickness: number,
+  parent: number = storey.placement
+): { id: number; placement: number } | null {
+  if (!(thickness > 0) || pieces.length === 0) return null
+  const slabPlacement = placement(c.w, parent, [0, 0, bottom])
+  const shape = piecesShape(c, pieces, thickness)
+  if (shape === null) return null
+  const id = c.w.add('IFCSLAB', str(c.guid(key[0], key[1])), ref(c.owner), str(name), NULL, NULL, ref(slabPlacement), ref(shape), NULL, en(kind))
+  return { id, placement: slabPlacement }
+}
 
-  return c.w.add(
-    'IFCSLAB',
-    str(c.guid(roof ? 'roof' : 'slab', room.id)),
-    ref(c.owner),
-    str(`${room.name} ${roof ? 'roof' : 'floor slab'}`),
-    NULL,
-    NULL,
-    ref(slabPlacement),
-    ref(shape),
-    NULL,
-    en(kind)
-  )
+const footprintPieces = (footprint: Footprint): MultiPolygon => [[ringOf(footprint.outline), ...footprint.holes.map(ringOf)]]
+
+/** The length round the outer edge of every piece, its holes not counted. */
+const piecesPerimeter = (pieces: MultiPolygon): number =>
+  piecesAsRings(pieces).reduce((sum, piece) => sum + perimeter(piece.outline), 0)
+
+/**
+ * HND-2: `Qto_SlabBaseQuantities`, from the slab as written: its body's outline and its
+ * thickness, and, when openings void it, its net area and volume, the body less them.
+ */
+function writeSlabQuantities(c: Context, key: string, slab: number, body: MultiPolygon, thickness: number, net?: number): void {
+  const gross = multiArea(body)
+  quantitySet(c, key, 'Qto_SlabBaseQuantities', [
+    ['LENGTH', 'Width', thickness, 'Its thickness.'],
+    ['LENGTH', 'Perimeter', piecesPerimeter(body)],
+    ['AREA', 'GrossArea', gross],
+    ...(net === undefined ? [] : [['AREA', 'NetArea', net, 'The gross area less the openings that void it.'] as const]),
+    ['VOLUME', 'GrossVolume', gross * thickness],
+    ...(net === undefined ? [] : [['VOLUME', 'NetVolume', net * thickness] as const])
+  ], slab)
 }
 
 /**
- * Every storey's floor slabs, and the roof over the top storey: a storey's
- * ceiling is the floor slab of the one above it. The lowest storey's slabs are
- * base slabs. Floors sharing the top or bottom level all count as it.
- *
- * Written after everything else, in a containment relation of their own per
- * storey (a storey may contain elements through several), so adding slabs left
- * every earlier entity of the file as it was.
+ * HND-2 on LVL-4's slabs: the plan states no slab or roof outline, so every slab and roof is
+ * Grid's reading of the walls (`planEnvelope`), and `Grid_Slab` says so: `Assumed` true, whether
+ * the thickness is the plan's, and what Grid took, in words, as the take-off says it.
  */
-function writeSlabs(building: Context, storeys: readonly Storey[]): void {
+function describeSlab(c: Context, key: string, slab: number, thicknessStated: boolean, note: string): void {
+  propertySet(c, key, 'Grid_Slab', [
+    property(c, 'Assumed', booleanValue(true)),
+    property(c, 'ThicknessStated', booleanValue(thicknessStated)),
+    property(c, 'Note', textValue(note))
+  ], slab)
+}
+
+const slabNote = (thicknessStated: boolean): string =>
+  'The plan states no slab: Grid takes the floor\'s outline, to the outside face of its walls, open over its stairs, lift shafts and voids, ' +
+  (thicknessStated ? 'as thick as the floor states.' : `${SLAB_THICKNESS} m thick: the floor states no slab thickness.`)
+const sunkenNote = (thicknessStated: boolean): string =>
+  'The plan states no slab: Grid puts one under this room, set below its storey, over its footprint, ' +
+  (thicknessStated ? 'as thick as the floor\'s slab states.' : `${SLAB_THICKNESS} m thick: the floor states no slab thickness.`)
+const RAISED_NOTE =
+  'The plan states no slab: Grid fills under this room, set above its storey, over its footprint, from the storey\'s floor up to the room\'s.'
+const roofNote = (thickness: number): string =>
+  `The plan states no roof: Grid puts a flat one, ${thickness} m thick, over every part of the floor with nothing above, on its walls, with no overhang and no fall.`
+
+/**
+ * Every storey's slab, its openings, the roof over its parts with nothing above, its parapet and
+ * its rooms' ceilings (LVL-4), from the floor's outline (`planEnvelope`):
+ *
+ * - one IfcSlab per floor, the one it stands on, over the whole outline, walls and all: a base
+ *   slab on the lowest level. Each stair, lift shaft and void that opens it is an
+ *   IfcOpeningElement voiding it, as a door voids a wall. A room set below its storey (LVL-7) is
+ *   cut out of it and gets a slab of its own, lower down; a room set above it gets a slab from the
+ *   storey's floor up to its own.
+ * - an IfcRoof (a flat roof) aggregating an IfcSlab `ROOF` over every part with nothing above, on
+ *   the floor's walls, and, with a parapet stated, an IfcWall `Parapet` along its edge.
+ * - an IfcCovering `CEILING` for each room that states a ceiling, and one for each lowered zone.
+ *
+ * Written after everything else, in a containment relation of their own per storey, so the walls,
+ * openings and spaces keep the entities they always had.
+ */
+function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
   if (storeys.length === 0) return
-  const levels = storeys.map((storey) => storey.model.floor.level)
-  const lowest = Math.min(...levels)
-  const highest = Math.max(...levels)
+  const floors = new Map(storeys.map((storey) => [storey.model.floor.id, { floorLevel: storey.elevation, clearHeight: storey.height }] as const))
+  let envelope: ReturnType<typeof planEnvelope>
+  try {
+    envelope = planEnvelope(plan, { elevations: { floors, roof: roofOver(floors) } })
+  } catch {
+    return
+  }
+  const byFloor = new Map(envelope.floors.map((f) => [f.floor, f] as const))
 
   for (const storey of storeys) {
     const { index, broken, floor } = storey.model
     const c = onFloor(building, floor.id)
-    const slabs: number[] = []
+    const contained: number[] = []
+    const env = byFloor.get(floor.id)
+    const roomNames = new Map(index.plan.rooms.map((room) => [room.id, room.name || room.id] as const))
 
+    try {
+      const slab = env?.slab ?? null
+      if (slab !== null) {
+        const kind: SlabKind = slab.kind === 'base' ? 'BASESLAB' : 'FLOOR'
+        const written = writeSlab(c, storey, ['floor-slab', floor.id], `${floor.name} slab`, slab.body, kind, -slab.thickness, slab.thickness)
+        if (written !== null) {
+          contained.push(written.id)
+          const key = `floor-slab:${floor.id}`
+          writeSlabQuantities(c, key, written.id, slab.body, slab.thickness, slab.openings.length === 0 ? undefined : slab.area)
+          describeSlab(c, key, written.id, slab.thicknessStated, slabNote(slab.thicknessStated))
+          for (const opening of slab.openings) {
+            const shape = piecesShape(c, opening.pieces, slab.thickness + 2 * VOID_CLEARANCE)
+            if (shape === null) continue
+            const over = opening.room === null ? opening.via : roomNames.get(opening.room) ?? opening.room
+            const hole = c.w.add(
+              'IFCOPENINGELEMENT',
+              str(c.guid('slab-opening', `${opening.kind}:${opening.via}`)),
+              ref(c.owner),
+              str(`Opening over ${over}`),
+              NULL,
+              str(opening.kind === 'void' ? 'Void' : opening.kind === 'lift' ? 'Lift shaft' : 'Stair'),
+              ref(placement(c.w, written.placement, [0, 0, -VOID_CLEARANCE])),
+              ref(shape),
+              NULL
+            )
+            relate(c, 'IFCRELVOIDSELEMENT', `slab:${floor.id}:${opening.kind}:${opening.via}`, ref(written.id), ref(hole))
+            quantitySet(c, `slab-opening:${opening.kind}:${opening.via}`, 'Qto_OpeningElementBaseQuantities', [
+              ['LENGTH', 'Depth', slab.thickness],
+              ['AREA', 'Area', opening.area, 'On plan, inside the floor\'s outline.']
+            ], hole)
+          }
+        }
+        // LVL-7: a room set below its storey stands on a slab of its own, lower down.
+        for (const sunk of slab.sunken) {
+          const piece = writeSlab(c, storey, ['slab', sunk.room], `${roomNames.get(sunk.room) ?? sunk.room} floor slab`, sunk.pieces, kind, sunk.offset - slab.thickness, slab.thickness)
+          if (piece === null) continue
+          contained.push(piece.id)
+          writeSlabQuantities(c, `slab:${sunk.room}`, piece.id, sunk.pieces, slab.thickness)
+          describeSlab(c, `slab:${sunk.room}`, piece.id, slab.thicknessStated, sunkenNote(slab.thicknessStated))
+        }
+      }
+    } catch {
+      // A slab that cannot be built is left out; the rest still exports.
+    }
+
+    // LVL-7: a room set above its storey stands on a slab from the storey's floor up to its own.
     for (const room of index.plan.rooms) {
       if (broken.has(room.id)) continue
+      const offset = roomFloorOffset(room)
+      if (!(offset > tolerance('sameFloorLevel'))) continue
       try {
         const footprint = roomFootprint(storey, room)
         if (!footprint) continue
-        const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
-        const under = slabUnder(floor)
-        // LVL-7: the slab's top is the room's floor. A raised room's slab is solid down to the
-        // storey's slab; a sunken one's is the storey's slab, lower down.
-        const top = roomFloorOffset(room)
-        const bottom = Math.min(top, 0) - under
-        slabs.push(writeSlab(c, storey, room, footprint, base, bottom, top - bottom))
-        if (floor.level === highest) {
-          slabs.push(writeSlab(c, storey, room, footprint, 'ROOF', storey.height, SLAB_THICKNESS))
-        }
+        const raised = writeSlab(c, storey, ['slab', room.id], `${room.name} floor slab`, footprintPieces(footprint), 'FLOOR', 0, offset)
+        if (raised === null) continue
+        contained.push(raised.id)
+        writeSlabQuantities(c, `slab:${room.id}`, raised.id, footprintPieces(footprint), offset)
+        // Its thickness is the room's stated rise above its storey.
+        describeSlab(c, `slab:${room.id}`, raised.id, true, RAISED_NOTE)
       } catch {
         // A room that cannot be built is left out.
       }
     }
 
-    if (slabs.length > 0) {
-      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(slabs), ref(storey.id))
+    try {
+      const roof = env?.roof ?? null
+      if (roof !== null) {
+        const bottom = roof.bottom - storey.elevation
+        const element = c.w.add(
+          'IFCROOF',
+          str(c.guid('roof-element', floor.id)),
+          ref(c.owner),
+          str(`${floor.name} roof`),
+          NULL,
+          NULL,
+          ref(placement(c.w, storey.placement, [0, 0, 0])),
+          NULL,
+          NULL,
+          en('FLAT_ROOF')
+        )
+        const slab = writeSlab(c, storey, ['roof-slab', floor.id], `${floor.name} roof slab`, roof.pieces, 'ROOF', bottom, roof.thickness)
+        if (slab !== null) {
+          aggregate(c, `roof:${floor.id}`, element, [slab.id])
+          // IFC2x3 has no base quantities for a roof: its slab carries them.
+          writeSlabQuantities(c, `roof-slab:${floor.id}`, slab.id, roof.pieces, roof.thickness)
+          describeSlab(c, `roof-slab:${floor.id}`, slab.id, false, roofNote(roof.thickness))
+        }
+        contained.push(element)
+        if (roof.parapet !== null) {
+          const shape = piecesShape(c, roof.parapet.pieces, roof.parapet.height)
+          if (shape !== null) {
+            const parapet = c.w.add(
+              'IFCWALL',
+              str(c.guid('parapet', floor.id)),
+              ref(c.owner),
+              str(`${floor.name} parapet`),
+              NULL,
+              str('Parapet'),
+              ref(placement(c.w, storey.placement, [0, 0, bottom + roof.thickness])),
+              ref(shape),
+              NULL
+            )
+            contained.push(parapet)
+            const footprint = multiArea(roof.parapet.pieces)
+            quantitySet(c, `parapet:${floor.id}`, 'Qto_WallBaseQuantities', [
+              ['LENGTH', 'Height', roof.parapet.height, 'Above the roof.'],
+              ['AREA', 'GrossFootprintArea', footprint],
+              ['VOLUME', 'GrossVolume', footprint * roof.parapet.height]
+            ], parapet)
+          }
+        }
+      }
+    } catch {
+      // A roof that cannot be built is left out.
+    }
+
+    // The rooms' ceilings, each covering its space.
+    for (const room of index.plan.rooms) {
+      if (broken.has(room.id) || room.ceiling === undefined) continue
+      try {
+        const pieces = roomCeiling(room, index, storey.height) ?? []
+        const coverings: number[] = []
+        const offset = roomFloorOffset(room)
+        for (const piece of pieces) {
+          const shape = piecesShape(c, piece.pieces, CEILING_DEPTH)
+          if (shape === null) continue
+          const covering = c.w.add(
+            'IFCCOVERING',
+            str(c.guid('ceiling', `${room.id}:${piece.zone ?? ''}`)),
+            ref(c.owner),
+            str(piece.zone === null ? `${room.name} ceiling` : `${room.name} ceiling, lowered zone ${piece.zone}`),
+            NULL,
+            NULL,
+            ref(placement(c.w, storey.placement, [0, 0, offset + piece.height])),
+            ref(shape),
+            NULL,
+            en('CEILING')
+          )
+          coverings.push(covering)
+          // The board's depth is drawn, not the plan's, so only its area is a quantity.
+          quantitySet(c, `ceiling:${room.id}:${piece.zone ?? ''}`, 'Qto_CoveringBaseQuantities', [
+            ['AREA', 'GrossArea', piece.area, 'On plan, inside the room\'s walls.']
+          ], covering)
+        }
+        if (coverings.length === 0) continue
+        contained.push(...coverings)
+        const space = storey.spaces.get(room.id)
+        if (space !== undefined) relate(c, 'IFCRELCOVERSSPACES', `ceiling:${room.id}`, ref(space), refs(coverings))
+      } catch {
+        // A ceiling that cannot be built is left out.
+      }
+    }
+
+    if (contained.length > 0) {
+      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(contained), ref(storey.id))
     }
   }
 }
@@ -1123,20 +1649,20 @@ function writeStair(c: Context, storey: Storey, stair: StairLayout): number {
   })
   stair.landings.forEach((_, i) => {
     const landing = blocks[block + i]!
-    parts.push(
-      c.w.add(
-        'IFCSLAB',
-        str(c.guid('stair-landing', `${stair.id}:${i}`)),
-        ref(c.owner),
-        str(`${stair.name} landing ${i + 1}`),
-        NULL,
-        NULL,
-        ref(placement(c.w, at, [0, 0, 0])),
-        ref(body([{ outline: landing.outline, height: landing.top - landing.bottom }])),
-        NULL,
-        en('LANDING')
-      )
+    const slab = c.w.add(
+      'IFCSLAB',
+      str(c.guid('stair-landing', `${stair.id}:${i}`)),
+      ref(c.owner),
+      str(`${stair.name} landing ${i + 1}`),
+      NULL,
+      NULL,
+      ref(placement(c.w, at, [0, 0, 0])),
+      ref(body([{ outline: landing.outline, height: landing.top - landing.bottom }])),
+      NULL,
+      en('LANDING')
     )
+    writeSlabQuantities(c, `landing:${stair.id}:${i}`, slab, footprintPieces({ outline: landing.outline, holes: [] }), landing.top - landing.bottom)
+    parts.push(slab)
   })
   aggregate(c, `stair:${stair.id}`, element, parts)
   return element
@@ -1159,15 +1685,18 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     }
     contained.push(element.id)
 
+    const written: Opening[] = []
     for (const opening of openingsOf(index, wall.id)) {
       if (broken.has(opening.id)) continue
       try {
         const filler = writeOpening(c, element, opening)
+        written.push(opening)
         if (filler !== null) contained.push(filler)
       } catch {
         // Likewise: one bad opening does not cost the wall its others.
       }
     }
+    writeWallQuantities(c, element, written)
   }
 
   if (contained.length > 0) {
@@ -1185,7 +1714,10 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     if (broken.has(room.id)) continue
     try {
       const space = writeSpace(c, storey, room)
-      if (space !== null) spaces.push(space)
+      if (space !== null) {
+        spaces.push(space)
+        storey.spaces.set(room.id, space)
+      }
     } catch {
       // A room that cannot be built is left out.
     }
@@ -1237,6 +1769,32 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
     if (written.length > 0) {
       relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `items:${floor.id}`, refs(written), ref(storey.id))
     }
+  }
+}
+
+/** CNT-9: the name of the property set that holds a part's facts of the person's own. */
+export const IFC_FACTS_SET = 'Grid_Properties'
+
+/** CNT-9: one fact as an IFC value: an integer, a real, a boolean, or a label. */
+function factValue(value: Facts[string]): string {
+  if (typeof value === 'boolean') return `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? `IFCINTEGER(${int(value)})` : `IFCREAL(${real(value)})`
+  return `IFCLABEL(${str(factText(value))})`
+}
+
+/**
+ * CNT-9: each part's facts of the person's own as one property set, `Grid_Properties`, of one
+ * IfcPropertySingleValue per fact, in the order the plan gives them, related to its element by an
+ * IfcRelDefinesByProperties. The set's name is Grid's own: `Pset_` names are the standard's. The
+ * elements come in the order they were written, which is id order (QAR-5), so the file does not
+ * hang on the plan's order; a plan with no facts writes the same file as before.
+ */
+function writeFacts(c: Context): void {
+  for (const { element, kind, id, guid, facts } of c.facts) {
+    const on: Context = { ...c, guid }
+    const values = Object.entries(facts).map(([name, value]) => c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, factValue(value), NULL))
+    const set = c.w.add('IFCPROPERTYSET', str(on.guid('facts', `${kind}:${id}`)), ref(c.owner), str(IFC_FACTS_SET), NULL, refs(values))
+    relate(on, 'IFCRELDEFINESBYPROPERTIES', `facts:${kind}:${id}`, refs([element]), ref(set))
   }
 }
 
@@ -1305,11 +1863,64 @@ function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   return options.projectId ?? IFC_DEFAULT_PROJECT_ID
 }
 
+type Pair2 = readonly [number, number]
+
+/**
+ * HND-2 (lab MS-12, CP2-1): the plan as the file writes it, near the origin, and where its origin
+ * went. A plan that reaches no further than `farFromOrigin` is written as it is. One drawn at
+ * survey coordinates is moved by whole steps of `farFromOrigin`, to bring the middle of its walls
+ * within half a step of the origin, and the move is the site's placement: every element keeps
+ * its place in the world, and its own coordinates are small, which BIM tools need to import it.
+ * A plan holding a coordinate past `largest`, which validation refuses, is written as it is, so
+ * the move cannot bring a refused part back.
+ */
+function nearOrigin(plan: FloorPlan): { readonly plan: FloorPlan; readonly at: Pair2 } {
+  const unmoved = { plan, at: [0, 0] as const }
+  // A plan read without the schema may hold anything: only pairs of finite numbers count, and
+  // anything else is left as it is, for the floors' validation to leave out.
+  const pair = (value: unknown): Pair2 | null =>
+    Array.isArray(value) && value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])
+      ? [value[0] as number, value[1] as number]
+      : null
+  const pairs = (values: readonly unknown[]): Pair2[] => values.flatMap((value) => {
+    const p = pair(value)
+    return p === null ? [] : [p]
+  })
+  const wallPoints = pairs(plan.walls.flatMap((wall) => [wall.start, wall.end]))
+  const others = pairs([
+    ...(plan.items ?? []).map((item) => item.at),
+    ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : []))
+  ])
+  if ([...wallPoints, ...others].some(([x, y]) => Math.hypot(x, y) > limit('largest'))) return unmoved
+  if (!wallPoints.some(([x, y]) => Math.hypot(x, y) > limit('farFromOrigin'))) return unmoved
+  const step = limit('farFromOrigin')
+  const middle = (axis: 0 | 1): number => {
+    const values = wallPoints.map((p) => p[axis])
+    return Math.round((Math.min(...values) + Math.max(...values)) / 2 / step) * step
+  }
+  const at: Pair2 = [middle(0), middle(1)]
+  function move<T>(value: T): T {
+    const p = pair(value)
+    return p === null ? value : ([p[0] - at[0], p[1] - at[1]] as T)
+  }
+  return {
+    plan: {
+      ...plan,
+      walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end) })),
+      ...(plan.items === undefined ? {} : { items: plan.items.map((item) => ({ ...item, at: move(item.at) })) }),
+      ...(plan.stairs === undefined
+        ? {}
+        : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) })
+    },
+    at
+  }
+}
+
 function buildDocument(given: FloorPlan, options: IfcOptions): string {
   const timestamp = usableTimestamp(options.timestamp)
   const projectName = options.projectName ?? DEFAULT_PROJECT_NAME
   // QAR-5: the parts in id order, so the file does not hang on the order they are listed in.
-  const plan = inIdOrder(given)
+  const { plan, at: origin } = nearOrigin(inIdOrder(given))
 
   const w = new StepWriter()
   const issuer = createGuidIssuer(projectIdOf(plan, options))
@@ -1320,10 +1931,12 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     w,
     owner,
     shared,
-    materials: { material: null, byThickness: new Map() },
-    doorsByOperation: new Map(),
+    materials: { byKind: new Map(), byType: new Map() },
+    openingStyles: new Map(),
+    roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n] as const)),
     guid: (kind, id) => issuer.issue(kind, id),
-    issuer
+    issuer,
+    facts: []
   }
 
   // The fixed entities (project, site, building) use their own kind as the id.
@@ -1351,8 +1964,12 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
 
   // CNT-3: a plan that says where it sits puts the site's origin on that point of the plan, with
   // its latitude, longitude and elevation; the building stays in the plan's own coordinates.
+  // HND-2: the elements are written moved by `origin` (`nearOrigin`), so the site sits at the
+  // plan's stated point, else at `origin`, and the building at `origin` from the site's: every
+  // element is where the plan puts it. `site.origin` is not moved, so it is the plan's own point.
   const where = siteOf(plan)
-  const sitePlacement = placement(w, null, where === null ? [0, 0, 0] : [where.origin[0], where.origin[1], 0])
+  const siteAt: Pair2 = where === null ? origin : where.origin
+  const sitePlacement = placement(w, null, [siteAt[0], siteAt[1], 0])
   const site = rooted(
     'IFCSITE',
     'site',
@@ -1371,7 +1988,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     NULL
   )
 
-  const buildingPlacement = placement(w, sitePlacement, where === null ? [0, 0, 0] : [-where.origin[0], -where.origin[1], 0])
+  const buildingPlacement = placement(w, sitePlacement, [origin[0] - siteAt[0], origin[1] - siteAt[1], 0])
   const building = rooted(
     'IFCBUILDING',
     'building',
@@ -1394,8 +2011,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     writeStorey(c, buildingPlacement, model, levels.get(model.floor.id)!)
   )
   for (const storey of storeys) writeStoreyContents(c, storey)
-  writeWallMaterialAssociations(c)
-  writeDoorStyles(c)
+  writeWallTypes(c)
+  writeOpeningStyles(c)
 
   aggregate(c, 'project', project, [site])
   aggregate(c, 'site', site, [building])
@@ -1405,9 +2022,10 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     building,
     storeys.map((storey) => storey.id)
   )
-  writeSlabs(c, storeys)
+  writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeFacts(c)
   writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([

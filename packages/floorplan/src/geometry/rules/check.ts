@@ -7,9 +7,10 @@
  */
 
 import type { FloorPlan } from '../plan'
-import { planFloors, planForFloor, wholePlan } from '../floors'
+import { floorOf, planFloors, planForFloor, wholePlan } from '../floors'
 import { validatePlan } from '../validate'
 import { floorElevations } from '../elevations'
+import { groundLevel, openingsBelowGround } from '../ground'
 import { limit } from '../tolerances'
 import type { ShortOf } from './graph'
 import { metresText } from '../rounding'
@@ -20,8 +21,11 @@ import { floorJoins } from '../floorJoins'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
 import { messages } from './messages'
-import type { FindingCode, NotChecked, RuleFinding, RulesReport } from './types'
+import type { FindingCode, HeldFinding, NotChecked, RuleFinding, RulesReport } from './types'
 import type { Opening } from '../plan'
+import { roomWallIds } from '../plan'
+import type { LeftOutPart } from '../../types/readParts'
+import { damaged, doorWaitsFor, leadsWaitsFor, planDamage, routeWaitsFor, type DrawnFloor, type FloorDamage } from './held'
 import { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from './types'
 
 const RULE_OF: Record<FindingCode, string> = {
@@ -32,7 +36,8 @@ const RULE_OF: Record<FindingCode, string> = {
   door_to_outside_above_ground: 'door-leads-somewhere',
   stair_out_of_line: 'stairs-line-up',
   lift_out_of_line: 'stairs-line-up',
-  opening_too_small_to_pass: 'room-has-door'
+  opening_too_small_to_pass: 'room-has-door',
+  opening_below_ground: 'openings-above-ground'
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -78,7 +83,9 @@ function floorFindings(
   floor: FloorRoutes,
   joined: ReadonlySet<string>,
   roomName: (id: string) => string,
-  loneRoomReached: boolean
+  loneRoomReached: boolean,
+  /** Rooms marked as a void (LVL-4): no room to stand in, so they need no door and no route. */
+  voids: ReadonlySet<string>
 ): { findings: RuleFinding[]; doorless: string[] } {
   const { graph } = floor
   const findings: RuleFinding[] = []
@@ -98,11 +105,12 @@ function floorFindings(
   // A floor that is one open room and that no stair joins is reached by a stair the plan does
   // not draw: it is not a room without a door.
   const loneRoom = loneRoomReached && graph.rooms.length === 1
-  const doorless = loneRoom ? [] : graph.rooms.filter((room) => !touched.has(room))
+  const doorless = loneRoom ? [] : graph.rooms.filter((room) => !touched.has(room) && !voids.has(room))
   for (const room of doorless) {
     findings.push(finding('room_without_door', floor.id, [room], messages.roomWithoutDoor(roomName(room))))
   }
-  return { findings, doorless }
+  // A void is left out of the routes as a room without a door is: nothing there to get out of.
+  return { findings, doorless: [...doorless, ...graph.rooms.filter((room) => voids.has(room))] }
 }
 
 /**
@@ -228,13 +236,51 @@ export function drawable(storey: FloorPlan): {
   }
 }
 
+export interface SanityOptions {
+  /**
+   * MSG-5: the walls, rooms and openings the reader left out of the plan (`readPlanParts`). A
+   * note that rests on one is held back, as one on a part the drawing check leaves out is.
+   */
+  readonly leftOut?: readonly LeftOutPart[]
+}
+
+/**
+ * The floors' "could not be drawn" notices (MSG-5): one for each floor where something could not
+ * be drawn, naming it, with the findings held back because they rest on it. A finding is held on
+ * its own floor's notice, or, for a route followed down a stair, on the first floor of its group
+ * where something could not be drawn.
+ */
+export function cannotBeDrawnNotices(
+  floors: readonly { readonly id: string }[],
+  damage: ReadonlyMap<string, FloorDamage>,
+  held: readonly (HeldFinding<RuleFinding> & { readonly on: string })[],
+  floorName: (id: string) => string,
+  roomName: (id: string) => string
+): NotChecked[] {
+  return floors.flatMap((floor) => {
+    const at = damage.get(floor.id)
+    if (!damaged(at)) return []
+    const mine = held.filter((h) => h.on === floor.id).map(({ finding, waitsFor }) => ({ finding, waitsFor }))
+    return [
+      {
+        reason: 'cannot_be_drawn' as const,
+        floor: floor.id,
+        rooms: at.rooms,
+        openings: at.openings,
+        message: messages.cannotBeDrawn(floorName(floor.id), at.rooms.map(roomName), at.openings),
+        ...(mine.length > 0 ? { held: mine } : {})
+      }
+    ]
+  })
+}
+
 /**
  * The plan checks alone: a way out, a door on every room, a route to the way out, and doors
  * that lead somewhere. Not the full check: `checkLocalRules` in `@ongrid/rules` runs these and
  * the figure checks, and `inspectPlan` there gives everything in one record (MSG-1). The two
  * no longer share a name, so importing the wrong one does not compile.
  */
-export function checkPlanSanity(plan: FloorPlan): RulesReport {
+export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): RulesReport {
   const floors = planFloors(plan)
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))
@@ -244,13 +290,16 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
 
   // The way out is checked from the ground floor: the floor at level 0, or the only floor there
   // is, unless it stands above the ground (LVL-1, lab VE-8: a flat whose only floor is the
-  // third). A floor a stair joins to it, directly or through other floors, is checked with it,
-  // its routes followed down the stair to a door (LVL-3, lab VE-1). Any other floor is said to be
-  // unchecked, never passed: a balcony door upstairs is not a way out.
+  // third). With the site's ground level stated (LVL-4, lab VE-7), the floor nearest the ground,
+  // and a floor stands above the ground by its height over that level. A floor a stair joins to
+  // it, directly or through other floors, is checked with it, its routes followed down the stair
+  // to a door (LVL-3, lab VE-1). Any other floor is said to be unchecked, never passed: a balcony
+  // door upstairs is not a way out.
   const elevations = floorElevations(plan)
-  const standsAt = (id: string): number => elevations.floors.get(id)?.floorLevel ?? 0
-  const aboveGround = (id: string): boolean => standsAt(id) > limit('outsideDoorAboveGround')
-  const ground = (floors.length === 1 ? floors : floors.filter((f) => f.level === 0)).filter((f) => !aboveGround(f.id))
+  const site = groundLevel(plan, elevations)
+  const standsAt = (id: string): number => site.above.get(id) ?? 0
+  const aboveGround = site.aboveGround
+  const ground = site.groundFloors
   const groundIds = new Set(ground.map((f) => f.id))
   const openingIds = new Set(plan.openings.map((o) => o.id))
 
@@ -259,8 +308,11 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
   const routes = new Map<string, FloorRoutes>()
   const outlines = new Map<string, Map<string, readonly Vec2[]>>()
   const leftOutOn = new Map<string, ReadonlySet<string>>()
+  const drawnFloors = new Map<string, DrawnFloor>()
   for (const floor of floors) {
-    const { storey, leftOut } = drawable(planForFloor(plan, floor.id))
+    const drawn = drawable(planForFloor(plan, floor.id))
+    drawnFloors.set(floor.id, drawn)
+    const { storey, leftOut } = drawn
     const index = indexPlan(storey)
     const graph = floorGraph(storey, leftOut.rooms)
     routes.set(floor.id, { id: floor.id, name: floorName(floor.id), graph, exitsCount: !aboveGround(floor.id) })
@@ -273,17 +325,9 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     }
     outlines.set(floor.id, new Map([...roomOutlines(storey, index, leftOut.rooms)].map(([id, o]) => [id, o.polygon] as const)))
     leftOutOn.set(floor.id, leftOut.rooms)
-    if (leftOut.rooms.size + leftOut.openings.size > 0) {
-      const rooms = [...leftOut.rooms].sort(byText)
-      notChecked.push({
-        reason: 'cannot_be_drawn',
-        floor: floor.id,
-        rooms,
-        openings: [...leftOut.openings].sort(byText),
-        message: messages.cannotBeDrawn(floorName(floor.id), rooms.map(roomName))
-      })
-    }
   }
+  // MSG-5: what could not be drawn, floor by floor, with what the reader left out.
+  const damage = planDamage(plan, drawnFloors, options.leftOut)
 
   // The floors' joins: stairs the plan states, and stair rooms one over the other. A lift is
   // lined up, never taken as a way out.
@@ -306,7 +350,8 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
   const doorless = new Set<string>()
   for (const floor of floors) {
     const checked = checkedGroups.has(find(floor.id))
-    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked)
+    const voids = new Set(planForFloor(plan, floor.id).rooms.filter((room) => room.void === true).map((room) => room.id))
+    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked, voids)
     findings.push(...own.findings)
     for (const room of own.doorless) doorless.add(at(floor.id, room))
   }
@@ -365,6 +410,21 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     }
   }
 
+  // Doors and windows in outside walls below the ground the site states (LVL-4, lab VE-7).
+  for (const below of openingsBelowGround(plan, elevations)) {
+    const room = below.rooms[0]
+    const depth = below.wholly ? below.topBelow : below.sillBelow
+    findings.push({
+      code: 'opening_below_ground',
+      ruleId: RULE_OF.opening_below_ground,
+      floor: below.floor,
+      rooms: [...below.rooms],
+      openings: [below.opening],
+      message: messages.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth)),
+      belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
+    })
+  }
+
   // Stair rooms, or lift shafts, that do not line up from one floor to the next (LVL-3, AU2).
   for (const out of joins.outOfLine) {
     const upperFloor = out.upper[0]!.floor
@@ -387,12 +447,45 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     )
   }
 
+  // MSG-5 (lab MS-4, W-6): a note that rests on a part that could not be drawn is held back, and
+  // the floor's notice names the part and keeps the note.
+  const rooms = new Map(plan.rooms.map((room) => [at(floorOf(room), room.id), room] as const))
+  const openingWall = new Map(plan.openings.map((o) => [o.id, o.wall] as const))
+  const groupOf = (id: string): string[] => floors.filter((f) => find(f.id) === find(id)).map((f) => f.id)
+  const held: (HeldFinding<RuleFinding> & { on: string })[] = []
+  const given = findings.filter((found) => {
+    let waitsFor: string[] = []
+    let on = found.floor
+    const room = rooms.get(at(found.floor, found.rooms[0] ?? ''))
+    switch (found.code) {
+      case 'no_exit':
+      case 'no_route_to_exit': {
+        const group = groupOf(found.floor)
+        waitsFor = routeWaitsFor(group.map((id) => damage.get(id)))
+        on = damaged(damage.get(found.floor)) ? found.floor : group.find((id) => damaged(damage.get(id))) ?? found.floor
+        break
+      }
+      case 'room_without_door':
+        waitsFor = room === undefined ? [] : doorWaitsFor(roomWallIds(room), damage.get(found.floor))
+        break
+      case 'door_to_undrawn_space':
+        waitsFor = leadsWaitsFor(openingWall.get(found.openings[0] ?? ''), damage.get(found.floor))
+        break
+      default:
+        break
+    }
+    if (waitsFor.length === 0) return true
+    held.push({ finding: found, waitsFor, on })
+    return false
+  })
+  notChecked.unshift(...cannotBeDrawnNotices(floors, damage, held, floorName, roomName))
+
   return {
     schemaVersion: RULES_REPORT_SCHEMA_VERSION,
     basis: 'general-baseline',
     label: GENERAL_GUIDANCE_LABEL,
     rules: RULES,
-    findings: findings.sort(
+    findings: given.sort(
       (a, b) =>
         (level.get(a.floor) ?? 0) - (level.get(b.floor) ?? 0) ||
         byText(a.floor, b.floor) ||

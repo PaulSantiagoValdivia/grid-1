@@ -14,6 +14,9 @@ const ORDER = [
   'grid_areas',
   'grid_takeoff',
   'grid_schedule',
+  'grid_fields',
+  'grid_find',
+  'grid_count',
   'grid_measure',
   'grid_view',
   'grid_describe',
@@ -33,10 +36,11 @@ const ORDER = [
   'grid_add_room',
   'grid_stretch',
   'grid_rename_room',
+  'grid_square_scan',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
-const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room'])
+const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
+const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan'])
 
 interface Listed {
   name: string
@@ -80,9 +84,13 @@ describe('tools/list', () => {
     // room, stretch and rename each have one.
     // 21 since CMD-13: a problem report the person decides to file.
     // 22 since MSG-10: a note the person sets aside as seen, which writes a file of its own.
-    // 24 since WRT-8: what a change did (grid_diff), and the start marker it compares with
+    // 23 since WRT-6: squaring a scan is an explicit step that says how far each wall moved
+    // (lab AE-4), not a side effect of another change. 26 since CNT-9: asking across the parts
+    // by their facts is three short calls, one per request (what can be asked, which parts, how
+    // many or how much by group).
+    // 28 since WRT-8: what a change did (grid_diff), and the start marker it compares with
     // where there is no git (grid_mark_start).
-    expect((await listed()).length).toBeLessThanOrEqual(24)
+    expect((await listed()).length).toBeLessThanOrEqual(28)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -179,6 +187,9 @@ describe('the tools on a two-bedroom flat', () => {
     grid_areas: {},
     grid_takeoff: {},
     grid_schedule: {},
+    grid_fields: {},
+    grid_find: { kind: ['door'], fields: ['width'] },
+    grid_count: { kind: ['room'], by: 'use', sum: ['area'] },
     grid_measure: { what: 'room', room: 'hall' },
     grid_view: { kind: 'plan' },
     grid_describe: {},
@@ -198,6 +209,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_add_room: { room: 'extension', name: 'Garden room', use: 'living', against: 'living', side: 'south', width: 3, depth: 3, in_the_way: 'remove', opening_width: 2, out: 'extended.json' },
     grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },
     grid_rename_room: { room: 'bed2', name: 'Study', use: 'other', out: 'renamed.json' },
+    grid_square_scan: { all: true, out: 'squared.json' },
   }
 
   it('answers every tool with text and data that fit its output schema', async () => {

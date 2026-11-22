@@ -260,8 +260,10 @@ describe('what is drawn (ARE-6)', () => {
         vertices.push({ x: Number(x), y: Number(y) })
       }
     })
+    // The room's floor alone: up to the next object (LVL-4 writes the floor's slab and roof after it).
+    const next = obj.findIndex((line, i) => i > start && line.startsWith('o '))
     const faces = obj
-      .slice(start + 1)
+      .slice(start + 1, next === -1 ? undefined : next)
       .filter((line) => line.startsWith('f '))
       .map((line) => line.split(' ').slice(1).map((n) => Number(n) - 1) as [number, number, number])
     const fromObj = floorOf(vertices, faces)

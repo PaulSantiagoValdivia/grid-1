@@ -63,6 +63,11 @@ export type FindingCode =
    * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
    */
   | 'opening_too_small_to_pass'
+  /**
+   * LVL-4: a door, window or doorless opening in an outside wall that lies below the ground level
+   * the site states (lab VE-7), wholly or in part. Only when the plan states the ground.
+   */
+  | 'opening_below_ground'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -99,6 +104,16 @@ export interface RuleFinding {
     readonly drawn: number
     readonly passable: number
   }
+  /**
+   * Only on `opening_below_ground`: how far its foot and its top lie under the ground, in m (its
+   * top's depth is 0 or less when it reaches above the ground), and whether it lies wholly below.
+   * Optional, like `through`.
+   */
+  readonly belowGround?: {
+    readonly foot: number
+    readonly top: number
+    readonly wholly: boolean
+  }
 }
 
 export type NotCheckedReason =
@@ -122,6 +137,18 @@ export interface NotChecked {
   readonly rooms: readonly string[]
   readonly openings: readonly string[]
   readonly message: string
+  /**
+   * MSG-5, only on `cannot_be_drawn`: the findings a check did not give because they rest on a
+   * part that could not be drawn (`rules/held.ts`), each with the parts it waits for. Each comes
+   * back once those parts are drawn, if it still holds. Optional, like `through`.
+   */
+  readonly held?: readonly HeldFinding[]
+}
+
+/** MSG-5: a finding held back, and the rooms and openings that could not be drawn that it waits for, by id. */
+export interface HeldFinding<Finding = RuleFinding> {
+  readonly finding: Finding
+  readonly waitsFor: readonly string[]
 }
 
 export interface RulesReport {

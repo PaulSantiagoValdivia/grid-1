@@ -7,6 +7,7 @@ import {
   planBounds,
   planFloors,
   planStairs,
+  sceneShell,
   type BuildingElevations,
   type Scene3D
 } from '@ongrid/floorplan/geometry'
@@ -45,8 +46,9 @@ export interface BuildingLayout {
   /** One floor or none: drawn exactly as before storeys were stacked. */
   readonly single: boolean
   /**
-   * The roof slab over the top level's floors, absolute heights. Null when a
-   * storey is focused (its ceiling is open to view) and for one storey.
+   * The roof slab over the top level's floors, absolute heights: the top of the building's box.
+   * Null when a storey is focused (its ceiling is open to view) and for one storey. While it is
+   * not null every storey draws its own roof, over its parts with nothing above (LVL-4).
    */
   readonly roof: {
     readonly floorIds: readonly string[]
@@ -245,8 +247,10 @@ export function createSceneMemo(): (slice: FloorPlan) => Scene3D {
   return (slice) => {
     // A stair (LVL-3) is laid out from both floors it joins, so its blocks are part of the key.
     const stairs = (slice.stairs ?? []).length === 0 ? [] : planStairs(slice, brokenOnFloor).stairs
-    const key = JSON.stringify([slice.walls, slice.rooms, slice.openings, stairs])
-    if (last?.key !== key) last = { key, scene: buildScene(slice) }
+    // LVL-4: the slab and roof come from this floor's outline and the floors' next to it.
+    const shell = sceneShell(slice)
+    const key = JSON.stringify([slice.walls, slice.rooms, slice.openings, stairs, shell])
+    if (last?.key !== key) last = { key, scene: buildScene(slice, { shell }) }
     return last.scene
   }
 }

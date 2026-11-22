@@ -44,7 +44,8 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `read` | `false` when the plan was refused. Then the lines are its refusals and nothing else ran. |
 | `count` | How many lines there are: the one number for how much there is to look at. |
 | `counts` | The same lines by kind. They add up to `count`. |
-| `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. |
+| `problems` | How many lines follow from no other line and are not `not-checked`: the problems to act on (MSG-5). See "Causes and follow-ons". |
+| `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. A line that follows from another comes right under it, whatever its kind (MSG-5). |
 | `basis` | `general-baseline`, or `local-lookup` once a looked-up figure was applied. |
 | `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
 | `checks` | Every check that ran and looked at something, with where its figures come from. A check that looked at no room, floor or door is not listed (MSG-2). Empty when the plan was refused. |
@@ -57,7 +58,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | Field | What it holds |
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
-| `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
+| `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
 | `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
@@ -66,6 +67,9 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `needed` | What would be right. |
 | `fix` | What to change. A suggestion: the plan is the author's. |
 | `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+| `causedBy` | Only on a line that follows from another (MSG-5): that line, as `{ code, id }`, the id of the part it is about (`""` for the plan; for `plan/duplicate-id`, the id it names). The line is listed under it and goes away when it is fixed. |
+| `each` | Only on a line that stands for the same note on several parts (MSG-5): each of them, `{ kind, id }`, `thing` first. Its message lists their names. |
+| `held` | Only on `floor/not-checked-rooms-not-drawn` and `floor/not-checked-doors-not-drawn` (MSG-5): the notes held back because they rest on what the line names, each `{ code, thing, floor, also, waitsFor }`. `waitsFor` holds the ids of the rooms and openings that could not be drawn. |
 | `fixes` | Only where a change to one part would clear the line (MSG-7): each such change as data, `{ part: "opening", id, width \| offset \| height \| sill \| wall }`. Several when more than one would do. `width` keeps the opening's start; `wall` is the id most likely meant. In `grid_check`, each line with fixes also carries `calls`: the same changes as calls to `grid_change_opening`, with the plan argument, ready to send. A `wall` fix has no call: no tool sets an opening's wall. |
 
 ### The kinds, in list order
@@ -76,6 +80,49 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
    and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+6. `to-confirm`: a value the plan marks assumed, for the person to confirm (WRT-6). Last, so the
+   other lines keep their numbers when an agent marks what it assumed.
+
+### Causes and follow-ons
+
+One broken part used to give a pile of lines with no root marked, and false notes about sound
+rooms beside it (lab MS-4, MS-5, W-6, W-7). Since MSG-5:
+
+- **A line that follows from another carries `causedBy` and comes right under it.** A door on a
+  wall that cannot be drawn (`opening/broken-wall`) and a room that rests on one
+  (`room/broken-wall`) follow from the wall's line, or from the reader's line for a wall it left
+  out (`plan/part-left-out`), or from `plan/duplicate-id` for an id two walls share. Enclosed
+  floor no room claims (`floor/unclaimed`) follows from the room that could not be drawn there,
+  and so does a fixture said to stand in no room (`item/outside-rooms`) whose middle is on that
+  floor. A fixture in front of a doorway or a window (`item/blocks-doorway`,
+  `item/blocks-window`) is measured from the wall, the opening and the fixture alone, so it
+  follows from nothing; for an opening or a wall that cannot be drawn it is not given, and the
+  floor's "could not be drawn" line names the opening. A room measured as if closed by a wall that stops short or leaves a gap: its
+  `room/space-mismatch`, `room/not-enclosed` and `room/overlap` lines, and the walls found
+  standing in it, follow from that wall's line. A plan with no walls gives `plan/no-walls`, and
+  every room and opening line follows from it. A plan that may not be in metres
+  (`plan/units-question`) files under it what is measured against a size (`plan/far-from-origin`,
+  the size questions, `room/too-small` and the escape-window findings), and it follows from the
+  reader's `plan/value-left-out` for a stated unit Grid reads as metres.
+- **A note that rests on a part that could not be drawn is held back.** The rule: a way out or
+  a route, when any room or opening on its floors could not be drawn; "no door", when the room
+  shares a wall with a room or an opening that could not be drawn, or an opening could be placed
+  on no wall; a door into a space not drawn, when a room that could not be drawn rests on its
+  wall; an escape note, when an opening on one of the room's walls could not be drawn, or could
+  be placed on no wall. The floor's `floor/not-checked-rooms-not-drawn` or
+  `floor/not-checked-doors-not-drawn` line names the parts and carries each note held back
+  under `held`. "Could not be drawn" covers what the drawing check leaves out and what the reader
+  left out. A held note comes back once the part is drawn, if it still holds; a note that
+  happens to be true is held too.
+- **Identical notes are one line.** Findings of one code on one floor that say the same in every
+  word but the room's name (`found`, `needed`, `fix` and `figures`) are one line that lists the
+  rooms where the one name goes, the verb agreeing ("The windows of "Room 301", "Room 302" are
+  too high to escape through"). `each` and `also` keep every id. The notes a person reads on the
+  plan stay one per room.
+
+`problems` counts the lines with no `causedBy`, `not-checked` lines aside. `grid check` sets each
+follow-on under its cause and prints "N problems; M lines follow from them", and the notes held
+back under their line.
 
 ### A line's number
 
@@ -138,6 +185,7 @@ label.
 | `plan/id-clash` | {thing} is left out: another part has the same id | every id on one part only, across the whole plan |
 | `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
+| `plan/no-walls` | The plan has no walls, but its rooms and openings name walls | the walls the rooms and openings name |
 | `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
 | `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
@@ -225,6 +273,7 @@ label.
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
+| `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
@@ -234,8 +283,8 @@ label.
 | `room/escape-window-too-high` | The window of "{name}" is too high to escape through | the figure used here, a sill at most {maximum} m above the floor ({basis}, status {status}); a lower sill when no figure applied; this check's figures were read for {kinds} |
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
-| `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
-| `floor/not-checked-doors-not-drawn` | On "{floor}", some doors could not be drawn and were not checked | doors that can be drawn |
+| `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
+| `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
@@ -246,6 +295,8 @@ label.
 | `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+| `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
+| `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
 
 ### Words Grid does not read
 
@@ -292,10 +343,12 @@ found in them. A `reason` is one of:
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
 | `cannot_be_drawn` | could not be drawn |
+| `waits_for_part` | beside a part that could not be drawn: held until it can be (MSG-5). Its finding is under the floor's `held` |
 | `no_stairs` | on a floor Grid cannot follow down to the ground floor |
 | `way_out_not_drawn` | the floor's only door out leads to a space that is not drawn |
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
 | `above_escape_storeys` | above the third storey, where the figures here stop |
+| `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
 
@@ -335,8 +388,9 @@ adds. A check that looked at nothing still says "Nothing was checked for …". `
 and `grid_check` with `full: true` add the checks run, every figure the checks applied, each
 check's parts one by one, and what these checks never look at (`limits`). The data is the same
 either way: `grid check --json` gives the whole check, and `grid_check`'s data keeps `coverage`
-and `limits`. For the lab's 62.65 m² flat the short text is 988 bytes from `grid check` and 973
-from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`).
+and `limits`. For the lab's 62.65 m² flat the short text is 1,201 bytes from `grid check` and 1,184
+from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`): 988 and 973 without
+the line saying the plan states no ground level (LVL-4).
 
 A person can set a note aside as seen, with a reason and the name or role they give, through
 `grid check --seen <n> --reason <text> --by <name>` or `grid_mark_seen`. A seen note is never left
@@ -346,7 +400,19 @@ the day, and the count of lines says how many are seen. The mark is keyed to the
 `also` ids, a room with the walls of its outline, an opening with its wall, a floor with
 everything on it, and the whole plan for a line about the plan that names no part. When one of
 them changes, the mark no longer holds and the line is listed with the others again, saying it
-was seen before and which part changed since.
+was seen before and which part changed since. A line for several rooms (`each`, MSG-5) is one
+note: its thing is the first room and `also` names the others, so the mark holds every room with
+its outline. A mark made on one of those rooms' notes, or on the line when it named other rooms,
+finds the line but never holds: the line is back, naming the rooms that joined or left. Marking
+or unmarking the line replaces such a mark.
+
+A part's content holds the plan's own `marks` that name it ([where a value came
+from](plan-file.md#where-a-value-came-from), WRT-6), so a change to one brings its note back.
+A seen mark is not one of those marks: they are in the plan, and seen marks only beside it. A
+part can have several notes of one code, one for each value the plan marks assumed
+(`plan/value-assumed`); a seen mark made while its note shared its `code`, `thing` and `also`
+with another keeps the note's `message` as well, and holds only for that note. A mark without
+one holds no more once another note joins its own, and the notes are listed as new.
 
 The marks are kept beside the plan, in `<plan>.seen.json` (`plan.seen.json` beside
 `plan.json`), read and written only through the project's resolver. No export, sheet or drawing
@@ -436,7 +502,7 @@ its text, which says the same.
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -466,9 +532,99 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `invalid_base`, `invalid_head`, `unknown_target`, `note_added`, `note_gone`,
   `suspected_id_churn`. They are the comparison's own, not lines of the result record.
 - New tool `grid_mark_start`, before `grid_mark_seen`: writes `plan.markers.json` beside the plan
-  and never the plan. Data: `written`, `name`, `at`, `replaced`, `removed`, `markers`.
+  and never the plan. Data: `written`, `name`, `at`, `replaced`, `removed`, `markers`. With
+  WRT-6's and CNT-9's tools, the tools are 28.
 - `diffPlans` in `@ongrid/floorplan` reads a room's walls as a ring: the same walls from another
   wall, or the other way round, are no change (lab U-4). Walls in another order still are.
+
+### 2026-11-22: facts of the person's own, and asking across them (CNT-9)
+
+- Three new reading tools, after `grid_schedule`: `grid_fields` (what can be asked: `kinds`,
+  `fields` with their `unit`, and `facts` with `count`, `kinds`, `type` and `values`),
+  `grid_find` (`count`, `ids`, `rows` holding `id` and only the fields named, `more`, `floors`,
+  `view`, `rule`) and `grid_count` (`by`, `groups` each with `value`, `count`, `sums`, `missing`
+  and `ids`, `total`, `units`, `view`, `rule`). `view` holds the arguments of `grid_view` that
+  show the answer. A field or fact the plan does not have is refused with the nearest name.
+  The tools are 26.
+- `grid_view` takes `highlight` (ids to pick out) and a field or fact in `colour` (any name
+  besides `use`), and then answers `painted`: each colour with what it stands for and its ids.
+  `colour` is now text of at most 120 characters, no longer only `use`.
+- `grid_schedule` with `of=rooms`: each row has `roomNumber` (the plan's, or null) and
+  `properties`; a room that states its number is listed first on its floor and shown by it, in
+  the text and the CSV's `number` column. `number` is still Grid's count. With `of=openings`,
+  each row has `properties`. The CSVs add a column per fact, after the others.
+- Edits keep the facts: `grid_split_room` gives the new room the room's facts (not its number),
+  and `grid_merge_rooms` says in `notKept` what the second room said otherwise and the number
+  that is gone. `grid_write_rooms` keeps each part's facts and number by id, and says so.
+- No new message code: a fact the format cannot read is `plan/value-left-out`, at its own place
+  (`walls[0].properties.<name>`), and the part keeps its other facts.
+
+### 2026-11-22: notes traced to their cause (MSG-5)
+
+- A line that follows from another carries `causedBy` (`{ code, id }`) and comes right under it,
+  whatever its kind; the record adds `problems`, the lines that follow from no other, `not-checked`
+  aside. See "Causes and follow-ons". The kinds keep their order for the lines that follow from
+  nothing; `count` and `counts` are as before. On the lab's 26 fault plans (group E), 90 lines are
+  30 problems with 43 lines beneath them.
+- A note that rests on a part that could not be drawn is no longer given: a way out, a route, "no
+  door", a door into a space not drawn and the escape notes, by the lab's rule (W-6). The floor's
+  "could not be drawn" line names the part and keeps each note under `held`. The plan with one
+  undrawable corridor gives 0 notes and that one line, where it gave 16 notes. `coverage` lists
+  those parts as skipped, `waits_for_part`. A door the reader left out, or on a wall the plan does
+  not have, now gives that line too (lab M-9: before, nothing was listed as not checked).
+- A fixture said to stand in no room (`item/outside-rooms`) because the room it stands in could
+  not be drawn, or was left out by the reader, follows from that room's line. `item/blocks-doorway`
+  and `item/blocks-window` follow from nothing, and are not given for an opening or a wall that
+  cannot be drawn: the floor's "could not be drawn" line names the opening.
+- Identical notes are one line listing the rooms, with `each` (lab MS-14: twelve hotel rooms,
+  one line). Its message lists the names where the one name goes, the verb agreeing.
+- New code `plan/no-walls` (`left-out`): the plan has no walls, but its rooms and openings name
+  walls. Every room and opening line follows from it.
+- Wordings changed: `floor/not-checked-rooms-not-drawn` now reads "these rooms could not be
+  drawn, so they and what rests on them were not checked: …"; `floor/not-checked-doors-not-drawn`
+  "these doors or windows could not be drawn, so they and what rests on them were not checked: …",
+  naming them. Their `found` lists the notes held back, their `fix` says those come back.
+- `grid check` sets a follow-on under its cause with "follows from", and the notes held back
+  under their line; `grid_check` returns `problems`, and its text says how many lines follow.
+- A line for several rooms is one note to mark seen (MSG-10): the mark holds every room in it,
+  and a mark on one room's note, made before they were one line, brings the line back as new
+  (`seen.state` `back`) rather than holding.
+
+### 2026-11-22: what was given and what was assumed (WRT-6)
+
+- A new kind of line, `to-confirm`, listed last, and a new code, `plan/value-assumed`: one line
+  for each value, or whole part, the plan's `marks` say was assumed, about that part. `counts`
+  has the new kind; `count` holds these lines too. `grid check` prints them under "To confirm",
+  and `grid_check`'s text names them even past its first 12 lines.
+- `plan/mark-no-part` (`worth-a-look`): a mark that names a part the plan does not have.
+- `grid_areas` gives `sureness` (`source`, `plusMinus` in m², `percent`) on each room whose walls
+  the plan marks, on each floor and on the plan (null on the plan when no wall is marked), and its text says "from a scan, about ± 1.6%".
+  `plusMinus` and `percent` are null when a scanned wall states no tolerance.
+- A new tool, `grid_square_scan`, after `grid_rename_room`: it squares the walls marked scanned,
+  and its receipt adds `moves` and `leftAsTheyAre`. With `grid_mark_seen` (MSG-10), the tools are 23.
+- A `to-confirm` line can be set aside as seen like any other (MSG-10): it is then listed under
+  "Seen", not "To confirm". Each assumed value of a part is its own note, so marking one leaves
+  the others listed, and a change to the part's marks brings a seen one back.
+- A wall that states no height is described as "wall height not stated (drawn 2.7 m high)" by
+  `grid_describe`, and its rooms text (`as=rooms`) states no height for it.
+
+### 2026-11-22: slabs, roofs, ceilings and the ground (LVL-4)
+
+- New finding `opening/below-ground`, under the new plan check `openings-above-ground`: a door,
+  window or doorless opening in an outside wall that lies below the ground level the site states
+  (`site.ground`, beside CNT-3's fields of `site`), wholly or in part. The finding carries `belowGround` (`foot`, `top`, in metres
+  under the ground, and `wholly`). With no ground stated the check skips every door and window with
+  the new reason `no_ground_level` and is not among the checks run; every report's limits gain one
+  line saying so.
+- With a ground level stated, the ground floor is the floor nearest it, and a floor stands above the
+  ground by its height over that level: `opening/door-out-above-ground` gives that height.
+  Unstated, both are as before.
+- A room marked `void` needs no door and has no route to check: it is no room to stand in.
+- `grid_takeoff` answers `envelope`: per floor the slab (as built, less its openings over stairs,
+  lifts and voids), the roof over every part with nothing above, and each figure's `assumed` list,
+  what Grid took that the plan does not state. Room lines gain `ceilingHeight` and `lowered`.
+- The 3D still (`grid_view`) and the exports draw a slab under every floor and a roof over every
+  part with nothing above; a still of one floor alone still has no roof.
 
 ### 2026-11-22: use indicators round the fixtures (CNT-13)
 

@@ -2,7 +2,8 @@
  * One room split in two by a new wall (WRT-3, lab WR-2): "bedroom 2 into a study and a second
  * bathroom". The new room takes the named side of the room, the size asked for measured inside
  * from that side's face; the room keeps its id and the rest. A door goes in the new wall unless
- * the call says none.
+ * the call says none. The new room keeps the room's facts of the person's own (CNT-9); the room
+ * keeps its stated number, and the new room has none.
  *
  * The way of doing it comes from the lab's edit prototype (`split-room`): rectangles square to
  * the drawing only; the new wall runs between the centre lines of the two walls it meets, and
@@ -11,9 +12,10 @@
  * Pure: a survey in, a patch out.
  */
 import { indexPlan, sub, tolerance, wallAxis, wallEndInOpening, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { heightStated } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
-import { applyPatch, type Direction, type Patch, type RoomChange } from './edits'
+import { readingAfter, type Direction, type Patch, type RoomChange } from './edits'
 import { freshId, usedIds } from './merge'
 import { EditRefused } from './refused'
 import { r3 } from './seat'
@@ -112,8 +114,11 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
   const sample = sides[side][0] ?? from.wall
   const wallId = request.wallId ?? freshId(used, `${request.newRoom.id}-${OPPOSITE[side]}`)
   used.add(wallId)
-  const height = Math.max(...[...sides.north, ...sides.east, ...sides.south, ...sides.west].filter((w) => w.virtual !== true).map((w) => w.height), sample.height)
-  const newWall: Record<string, unknown> = { id: wallId, start: from.at, end: to.at, thickness: t, height, kind: 'interior', ...(room.floor !== undefined ? { floor: room.floor } : {}) }
+  // WRT-6: as high as the stated walls round it; with none stated, it states none either, and
+  // takes its floor's height or Grid's default as they do.
+  const stated = [...sides.north, ...sides.east, ...sides.south, ...sides.west, sample].filter((w) => w.virtual !== true && heightStated(w))
+  const height = stated.length === 0 ? null : Math.max(...stated.map((w) => w.height))
+  const newWall: Record<string, unknown> = { id: wallId, start: from.at, end: to.at, thickness: t, ...(height === null ? {} : { height }), kind: 'interior', ...(room.floor !== undefined ? { floor: room.floor } : {}) }
 
   // Each part's walls, counter-clockwise from the south: the side it gives up is the new wall.
   const part = (far: Direction, keepLow: boolean): string[] => {
@@ -153,7 +158,13 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
     ...(request.newRoom.use !== undefined ? { use: request.newRoom.use } : {}),
     boundary: taken,
     ...(room.floor !== undefined ? { floor: room.floor } : {}),
+    // CNT-9: both parts keep the room's facts of the person's own; its number stays with the room.
+    ...(room.properties !== undefined && Object.keys(room.properties).length > 0 ? { properties: { ...room.properties } } : {}),
   }]
+  if (room.properties !== undefined && Object.keys(room.properties).length > 0) {
+    guessed.push(`${quoted(request.newRoom.name)} keeps the facts of ${name} (${Object.keys(room.properties).map(quoted).join(', ')}): change them in the plan file where they differ.`)
+  }
+  if (room.number !== undefined) guessed.push(`${name} keeps its room number ${quoted(room.number)}; ${quoted(request.newRoom.name)} has none.`)
   const length = Math.hypot(to.at[0] - from.at[0], to.at[1] - from.at[1])
   said.push(`New wall ${quoted(wallId)}, ${t.toFixed(2)} m thick and ${length.toFixed(2)} m long, ${size.toFixed(2)} m inside from the ${side} side of ${name}, from wall ${quoted(from.wall.id)} to wall ${quoted(to.wall.id)}.`)
 
@@ -185,7 +196,7 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
 
   const patch: Patch = { walls: new Map(), openings: new Map(), removeOpenings: new Set(), rooms, said, guessed, notKept, addWalls: [newWall], addRooms, addOpenings }
   // The rooms as the split leaves them, for their areas and their windows.
-  const after = surveyPlan(applyPatch(plan as unknown as Record<string, unknown>, patch) as unknown as Survey['plan'])
+  const after = surveyPlan(readingAfter(plan, patch))
   const area = (id: string): number => after.byId.get(id)?.facts.shape?.area ?? 0
   const kept = request.name !== undefined ? `${name} (now ${quoted(request.name)})` : name
   said.push(`${kept}: ${(survey.byId.get(roomId)!.facts.shape?.area ?? 0).toFixed(2)} → ${area(roomId).toFixed(2)} m²; new room ${quoted(request.newRoom.name)}: ${area(request.newRoom.id).toFixed(2)} m².`)

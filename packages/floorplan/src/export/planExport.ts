@@ -14,7 +14,7 @@
  */
 import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
-import { buildFloorPlan, buildScene, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
+import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
 import type { LeftOutPart } from '../geometry/export/leftOut'
 import { exportContents } from './leftOut'
 
@@ -89,7 +89,9 @@ export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanE
   const contents = exportContents(ordered, [floorId], options.faults)
   const storey = planForFloor(ordered, floorId)
   const note = { leftOut: contents.leftOut }
-  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), note)
+  // CNT-9: the DXF writes the facts of the floor's parts and of the floor itself.
+  const facts = dxfFactsOf(storey, planFloors(ordered).find((f) => f.id === floorId) ?? null)
+  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), { ...note, facts })
     : format === 'obj' ? toObj(buildScene(storey), note)
     : toGlb(buildScene(storey), note)
   const floors = planFloors(plan)

@@ -12,12 +12,12 @@
  * Pure: a plan in, plain data out.
  */
 
-import { indexPlan, planFloors, planForFloor, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
+import { indexPlan, planFloors, planForFloor, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { buildingKindsText, type BuildingKind } from './figures'
-import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, SkipReason } from './types'
+import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, RuleFinding, SkipReason } from './types'
 
 /** What one check looked at and skipped on one floor, by id. */
 export interface FloorScope {
@@ -33,10 +33,12 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'no_figures_for_place',
   'no_rooms',
   'cannot_be_drawn',
+  'waits_for_part',
   'no_stairs',
   'way_out_not_drawn',
   'alone_off_ground',
   'above_escape_storeys',
+  'no_ground_level',
   'no_use',
   'use_not_covered'
 ]
@@ -48,6 +50,7 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
   'room-reaches-exit': 'room',
   'door-leads-somewhere': 'door',
   'stairs-line-up': 'room',
+  'openings-above-ground': 'door',
   'habitable-room-area': 'room',
   'escape-opening': 'room'
 }
@@ -67,6 +70,8 @@ export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonl
       return 'no rooms on the floor'
     case 'cannot_be_drawn':
       return 'could not be drawn'
+    case 'waits_for_part':
+      return 'beside a part that could not be drawn: held until it can be'
     case 'no_stairs':
       return 'on a floor Grid cannot follow down to the ground floor'
     case 'way_out_not_drawn':
@@ -75,6 +80,8 @@ export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonl
       return 'the only room on a floor off the ground, reached by a stair the plan does not draw'
     case 'above_escape_storeys':
       return 'above the third storey, where the figures here stop'
+    case 'no_ground_level':
+      return 'the plan states no ground level for the site'
     case 'no_use':
       return 'no use stated'
     case 'use_not_covered':
@@ -135,6 +142,7 @@ export function planCheckScopes(
   const noStairs = new Set(base.notChecked.filter((n) => n.reason === 'no_stairs').map((n) => n.floor))
   const wayOutNotDrawn = new Set(base.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
   const scopes = new Map<string, [string, FloorScope][]>(base.rules.map((rule) => [rule.id, []]))
+  const ground = statedGround(plan) !== null
   const add = (rule: string, floor: string, scope: FloorScope): void => {
     scopes.get(rule)?.push([floor, scope])
   }
@@ -172,6 +180,14 @@ export function planCheckScopes(
       skipped: { cannot_be_drawn: cannot, use_not_covered: drawn.filter((id) => !shafts.includes(id)) }
     })
 
+    // No door or window below the ground (LVL-4): every door, window and opening that can be
+    // drawn, when the site states its ground level; with none stated each is skipped for want of it.
+    const sound = slice.openings.filter((o) => !leftOut.openings.has(o.id)).map((o) => o.id)
+    add('openings-above-ground', floor.id, {
+      lookedAt: ground ? sound : [],
+      skipped: { cannot_be_drawn: slice.openings.filter((o) => leftOut.openings.has(o.id)).map((o) => o.id), ...(ground ? {} : { no_ground_level: sound }) }
+    })
+
     // Every door leads somewhere: every door and opening that can be drawn, on every floor with
     // rooms. With no room on either side, a door is not read at all.
     const doors = slice.openings.filter((o) => o.type !== 'window')
@@ -185,6 +201,39 @@ export function planCheckScopes(
     })
   }
   return scopes
+}
+
+/**
+ * MSG-5: the parts whose finding was held back, moved from `lookedAt` to `skipped`
+ * (`waits_for_part`): a check that cannot say either way has not looked at them. A finding is
+ * about a floor (`floor-has-exit`), a door (`door-leads-somewhere`) or its first room.
+ */
+export function heldCoverage(coverage: readonly CheckCoverage[], held: readonly RuleFinding[]): CheckCoverage[] {
+  const count = (groups: readonly CoverageGroup[]): number => groups.reduce((sum, group) => sum + group.ids.length, 0)
+  return coverage.map((check) => {
+    const mine = held.filter((finding) => finding.ruleId === check.ruleId)
+    if (mine.length === 0) return check
+    const part = (finding: RuleFinding): string | undefined =>
+      check.looksAt === 'floor' ? finding.floor : check.looksAt === 'door' ? finding.openings[0] : finding.rooms[0]
+    const moved = new Map<string, Set<string>>()
+    for (const finding of mine) {
+      const id = part(finding)
+      if (id === undefined) continue
+      if (!check.lookedAt.some((group) => group.floor === finding.floor && group.ids.includes(id))) continue
+      moved.set(finding.floor, (moved.get(finding.floor) ?? new Set()).add(id))
+    }
+    if (moved.size === 0) return check
+    const lookedAt = check.lookedAt
+      .map((group) => ({ floor: group.floor, ids: group.ids.filter((id) => !moved.get(group.floor)?.has(id)) }))
+      .filter((group) => group.ids.length > 0)
+    const skipped: CoverageSkip[] = [...check.skipped]
+    for (const [floor, ids] of moved) skipped.push({ floor, ids: sorted([...ids]), reason: 'waits_for_part', why: skipWhy('waits_for_part', check.ruleId) })
+    // In floor order as `coverageOf` gives them, then by reason.
+    const floorOrder = new Map<string, number>()
+    for (const group of [...check.lookedAt, ...check.skipped]) if (!floorOrder.has(group.floor)) floorOrder.set(group.floor, floorOrder.size)
+    skipped.sort((a, b) => (floorOrder.get(a.floor) ?? 0) - (floorOrder.get(b.floor) ?? 0) || SKIP_ORDER.indexOf(a.reason) - SKIP_ORDER.indexOf(b.reason))
+    return { ...check, lookedAt, lookedAtCount: count(lookedAt), skipped, skippedCount: count(skipped) }
+  })
 }
 
 /** The coverage of one floor's parts, and the plan's, counted again: what `--floor` shows. */
