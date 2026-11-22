@@ -568,6 +568,8 @@ export const CODES = {
   'plan/mark-no-part': {
     variant: { found: (s) => (s.word ? 'word' : '') }
   },
+  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
+  'plan/not-checked-access': {},
   'plan/not-checked-no-rooms': {
     values: (): Values => ({ wording: figureSaids.noRooms() })
   }

@@ -23,8 +23,12 @@ export {
   readForSentence,
   isFigureKey,
   isPlausible,
-  resolveFigure
+  resolveFigure,
+  CONFIRMED_STATUSES,
+  isConfirmed,
+  confirmedFigure
 } from './figures'
+export type { ConfirmedFigure } from './figures'
 export type { BuildingKind, FigureKey, FigureSpec, FigureUnit, Provenance, SourceCitation, Verification, VerificationStatus } from './figures'
 export { figuresFromSheet } from './fromSheet'
 export {

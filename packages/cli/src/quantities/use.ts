@@ -80,7 +80,7 @@ function against(measured: number, figure: Figure, L: Length): string {
 
 const isUnder = (measured: number | null, figure: Figure): boolean => measured === null || measured + tolerance('joint') < figure.value
 
-interface SurveyFixtures {
+export interface SurveyFixtures {
   readonly rows: readonly FixtureRow[]
   readonly items: readonly Item[]
   readonly obstacles: (floor: string) => Obstacle[]
@@ -88,8 +88,8 @@ interface SurveyFixtures {
 
 const fixturesCache = new WeakMap<Survey, SurveyFixtures>()
 
-/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. */
-function fixturesOf(survey: Survey): SurveyFixtures {
+/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. CNT-17's access measures keep clear of them too. */
+export function fixturesOf(survey: Survey): SurveyFixtures {
   const known = fixturesCache.get(survey)
   if (known) return known
   const found = fixturesOfPlan(survey)

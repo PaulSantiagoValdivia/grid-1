@@ -11,11 +11,15 @@
 import { statedDisplay, type Display } from '@ongrid/floorplan/types/units'
 import { say, type Language } from '@ongrid/floorplan/messages'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
+import type { Bounds, Dimension, DrawingMarks, DrawingMarksAsked, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
+  computeBounds,
+  drawingMarks,
+  limit,
+  marksExtent,
   floorAbove,
   planForFloor,
   resolveFloor,
@@ -34,6 +38,7 @@ import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
 import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
+import { drawingMarkNodes } from './drawingMarks'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -92,6 +97,12 @@ export interface PictureOptions {
    * `display`), else English. Room names and the plan's own words are drawn as written.
    */
   readonly language?: Language
+  /**
+   * LVL-9: the marks for the plan's other drawings: `section`, a section's cut line with the way it
+   * looks; `elevations`, a mark outside each main side looking at the building; `levels`, each
+   * room's floor level. None by default.
+   */
+  readonly marks?: DrawingMarksAsked
 }
 
 /** SHT-7: what a picture shows. */
@@ -140,7 +151,7 @@ export interface Picture {
   readonly key: PictureKey | null
   /** MSG-11: the language of its own words, for the label and the description. English when left out. */
   readonly language?: Language
-  /** What the picture is, for its accessible name: a floor plan's when left out. LVL-8: a facade's. */
+  /** What the picture is, for its accessible name: a floor plan's when left out. LVL-8: a facade's; LVL-9: a section's. */
   readonly title?: string
 }
 
@@ -248,9 +259,27 @@ function framePicture(plan: FloorPlan, options: PictureOptions) {
   const slice = planForFloor(withPatterns(plan), floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
-  const framed = options.frame ?? framingOf(drawing, dimensions)
+  const around = framingOf(drawing, dimensions)
+  // LVL-9: the marks stand outside the drawing and its dimensions, and the view frames them too.
+  const marks = marksOf(plan, floor, drawing, around, options.marks)
+  const framed = options.frame ?? (marks === null ? around : withMarks(around, marks))
   const { width, height } = sizeOf(framed, options)
-  return { floor, slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
+  return { floor, slice, drawing, dimensions, marks, width, height, view: fitTo(framed, width / height) }
+}
+
+function marksOf(plan: FloorPlan, floor: string, drawing: PlanDrawing, around: Bounds, asked: DrawingMarksAsked | undefined): DrawingMarks | null {
+  if (asked === undefined || (asked.section == null && asked.elevations !== true && asked.levels !== true)) return null
+  return drawingMarks(plan, floor, drawing, around, asked)
+}
+
+/** The frame round the drawing and its marks, with half a mark's distance round each, for its symbol. */
+function withMarks(around: Bounds, marks: DrawingMarks): Bounds {
+  const reach = limit('elevationMarkOffset') / 2
+  const points = marksExtent(marks).flatMap((p) => [
+    { x: p.x - reach, y: p.y - reach },
+    { x: p.x + reach, y: p.y + reach }
+  ])
+  return computeBounds([around.min, around.max, ...points])
 }
 
 /**
@@ -277,7 +306,7 @@ export function displayOfPicture(plan: FloorPlan, options: PictureOptions): Disp
 
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
-  const { floor, slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
+  const { floor, slice, drawing, dimensions, marks, width, height, view } = framePicture(plan, options)
   const display = displayOfPicture(plan, options)
   const words = wordsOf(display)
   const look = lookOf(options.look)
@@ -314,7 +343,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     }
   })
   // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
-  const nodes = drawing.north === null ? scene : [...scene, northArrowNode(drawing.north, view, view.width / width, look.colors)]
+  const withMarkNodes = marks === null ? scene : [...scene, ...drawingMarkNodes(marks, look, view.width / width, options.paperScale, words)]
+  const nodes = drawing.north === null ? withMarkNodes : [...withMarkNodes, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const painted = show.paintKey ?? []
@@ -380,7 +410,7 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
         height: Math.round(total * scale),
         viewBox: `0 0 ${picture.width} ${total}`,
         role: 'img',
-        'aria-label': picture.title ?? drawingText(words, 'drawing.picture.keyed', { count: picture.rooms })
+        'aria-label': picture.title === undefined ? drawingText(words, 'drawing.picture.keyed', { count: picture.rooms }) : drawingText(words, 'drawing.picture.titled.keyed', { title: picture.title })
       },
       [
         el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),

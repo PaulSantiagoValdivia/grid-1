@@ -30,3 +30,5 @@ export { facadePicture, facadeScene, facadeToSvg, facadeCaption } from './facade
 export type { FacadePicture, FacadePictureOptions } from './facade'
 export { comparisonPicture, COMPARISON_COLORS, COMPARISON_LOOK, UNCHANGED_COLORS } from './comparison'
 export type { ComparisonPictureOptions } from './comparison'
+export { sectionPicture } from './section'
+export type { SectionPicture, SectionPictureOptions } from './section'

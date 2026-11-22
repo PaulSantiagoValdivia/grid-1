@@ -5,6 +5,8 @@ import { loadLanguage, say, labelOfUse } from '@ongrid/floorplan/messages'
 import { FloorPlanSchema, ROOM_USES, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { planPicture, planToSvg, pictureToSvg } from '../planSvg'
 import type { FaultLine } from '../faults'
+import { sectionPicture } from '../section'
+import { labPlan } from '@ongrid/floorplan/test-support/lab'
 
 /**
  * MSG-11: Grid's own words on a drawing in the person's language, with its decimal mark. The
@@ -82,5 +84,47 @@ describe('a drawing in Spanish (MSG-11)', () => {
     // The key's room uses are their ids in English, as they always were.
     for (const use of ROOM_USES) expect(labelOfUse('en', use)).toBe(use)
     expect(pictureToSvg(planPicture(plan, { language: 'es' }))).toContain('Orientación general, no sus normas locales')
+  })
+})
+
+describe('a section and the marks on a plan in Spanish (LVL-9, after merging main at e486ccba)', () => {
+  const line = { from: { x: 4.9, y: -2 }, to: { x: 4.9, y: 13 }, toward: 'left' as const }
+  const townhouse = () => labPlan('A/scenarios/townhouse.json')
+
+  it('writes its title, levels, heights and the list of what Grid took in Spanish', () => {
+    const english = sectionPicture(townhouse(), line, { look: 'technical' })
+    const picture = sectionPicture(townhouse(), line, { look: 'technical', language: 'es' })
+    const svg = pictureToSvg(picture)
+    const words = texts(svg)
+    expect(picture.title).toMatch(/^Sección A–A, que corta \d+ estancias?$/)
+    expect(svg).toMatch(/aria-label="Sección A–A, que corta \d+ estancias?, y una leyenda de lo que conviene revisar"/)
+    expect(svg).toContain('Orientación general, no sus normas locales')
+    expect(words).toContain('Sección A–A')
+    expect(words.some((w) => /^Corte de \(4,90; -2,00\) a \(4,90; 13,00\), mirando a la izquierda/.test(w))).toBe(true)
+    expect(words.some((w) => / Terreno$/.test(w))).toBe(true)
+    expect(words.some((w) => /^\d+,\d{2} m$/.test(w))).toBe(true)
+    // Every sentence of what was taken is said in Spanish, as many as in English.
+    expect(english.section.assumed.length).toBeGreaterThan(0)
+    for (const a of picture.section.assumed) expect(words.join('\n')).not.toContain(a.words.slice(0, 30))
+    expect(svg).not.toMatch(/\{[A-Za-z][A-Za-z0-9]*\}/)
+    // The plan's own floor names ("Ground floor") stay as written.
+    expect(words.join('\n')).not.toMatch(/\b(Section|Cut from|Hatched|Also taken)\b|\b(Ground|Roof)$/m)
+  })
+
+  it('keeps the English as it was, and its sentences as data', () => {
+    const picture = sectionPicture(townhouse(), line)
+    expect(picture.title).toMatch(/^Section A–A through \d+ rooms?$/)
+    expect(picture.language).toBeUndefined()
+    for (const a of picture.section.assumed) {
+      expect(a.said).toBeDefined()
+      expect(Object.keys(a)).not.toContain('said')
+    }
+  })
+
+  it('names the elevation marks by the way they face in Spanish', () => {
+    const svg = planToSvg(townhouse(), { language: 'es', marks: { section: null, elevations: true, levels: false } })
+    const marks = [...svg.matchAll(/<g [^>]*data-part="elevation-mark"[^>]*data-faces="([a-z-]+)"[\s\S]*?<text[^>]*>([^<]*)<\/text>/g)].map((m) => [m[1], m[2]])
+    expect(marks.length).toBeGreaterThan(0)
+    for (const [faces, letters] of marks) expect(letters).toBe(say('es', `drawing.mark.faces.${faces as 'north'}`))
   })
 })

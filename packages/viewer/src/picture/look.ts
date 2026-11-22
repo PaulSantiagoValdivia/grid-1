@@ -226,9 +226,13 @@ export type LinePart =
   | 'elevationFar'
   | 'elevationOpening'
   | 'elevationLevel'
+  /** LVL-9: the hatching over what a section takes that the plan does not state. */
+  | 'hatch'
+  /** LVL-9: a section's cut line on the plan, and the marks for elevations and levels. */
+  | 'mark'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'boundary'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain' | 'boundary'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -394,9 +398,13 @@ const SCREEN_LINES: ScreenLines = {
     elevationBack: ELEVATION_PX.back,
     elevationFar: ELEVATION_PX.far,
     elevationOpening: ELEVATION_PX.opening,
-    elevationLevel: ELEVATION_PX.level
+    elevationLevel: ELEVATION_PX.level,
+    // LVL-9: the section's hatch and the marks on a plan, which the app does not draw, so plan.css
+    // has none. A section's ground, what it sees beyond and its level marks are LVL-8's parts.
+    hatch: 0.75,
+    mark: 1
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3] }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3], chain: [12, 3, 2, 3] }
 }
 
 /**
@@ -441,9 +449,11 @@ const PAPER_LINES: PaperLines = {
     elevationBack: 'finest',
     elevationFar: 'finest',
     elevationOpening: 'finest',
-    elevationLevel: 'finest'
+    elevationLevel: 'finest',
+    hatch: 'finest',
+    mark: 'fine'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1], chain: [6, 1.5, 0.8, 1.5] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */

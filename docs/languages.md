@@ -127,6 +127,16 @@ Draft, not reviewed.
 | set-back | retranqueo |
 | plot coverage | ocupación de la parcela |
 | fence, gate, path, paved area, pool | valla, cancela, camino, zona pavimentada, piscina |
+| section | sección |
+| slab | forjado |
+| eaves | alero |
+| hatched (on a drawing) | rayado |
+| ground (in a section) | terreno |
+| mono-pitch, gable, hip roof | cubierta de una vertiente, a dos aguas, a cuatro aguas |
+| accessible | accesible |
+| route | recorrido |
+| the brief | el programa de necesidades |
+| a named person | una persona con nombre |
 
 ## Later steps
 

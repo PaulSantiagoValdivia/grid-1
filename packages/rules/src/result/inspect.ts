@@ -628,7 +628,7 @@ function noticeLine(notice: NotChecked, names: Names, country: string, wayOutNot
 }
 
 /** The stages of a check, by their words (`line.part.stage.*`). */
-type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'writing' | 'site' | 'orientation' | 'marks'
+type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'writing' | 'site' | 'orientation' | 'marks' | 'accessible'
 
 function checkFailed(stage: Stage, error: unknown): ResultLine {
   return line('plan/check-failed', 'not-checked', { kind: 'plan', id: '' }, null, {
@@ -859,6 +859,17 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
         })
       )
     }
+  })
+  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured by
+  // grid_measure what=access, never checked here: no figure for it has been confirmed.
+  stage('accessible', () => {
+    const rooms = plan.accessible?.rooms ?? []
+    const routes = plan.accessible?.routes ?? []
+    if (rooms.length === 0 && routes.length === 0) return
+    const count = (n: number, part: 'room' | 'route'): Value => said(`line.part.accessCount.${part}.${n === 1 ? 'one' : 'many'}`, { count: n })
+    const what = joined([...(rooms.length > 0 ? [count(rooms.length, 'room')] : []), ...(routes.length > 0 ? [count(routes.length, 'route')] : [])], 'join.and')
+    const marked = [...new Set([...rooms, ...routes.flatMap((r) => [r.to, ...(r.from === undefined ? [] : [r.from])])])]
+    lines.push(line('plan/not-checked-access', 'not-checked', { kind: 'plan', id: '' }, null, { ...blank(THE_PLAN), also: marked, floors: names.floors, said: what }))
   })
   // MSG-5: a plan that may not be in metres (`plan/units-question`): what is measured against a
   // size follows from it, and it follows from the unit the plan states, which is read as metres.

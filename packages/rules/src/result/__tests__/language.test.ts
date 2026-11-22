@@ -120,3 +120,31 @@ describe('the record in Spanish (MSG-11)', () => {
     expect(coverage.lookedAt.flatMap((g) => g.ids)).toContain(bedroom.id)
   })
 })
+
+describe('what the plan marks as needing to be accessible, in Spanish (CNT-17, after merging main at e486ccba)', () => {
+  const room = {
+    version: '1',
+    units: 'm',
+    walls: [
+      { id: 's', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'e', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'n', start: [4, 3], end: [0, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'w', start: [0, 3], end: [0, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+    ],
+    rooms: [{ id: 'bath', name: 'Bathroom', use: 'bathroom', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [{ id: 'd1', wall: 's', type: 'door', offset: 1, width: 0.9, height: 2.1, sill: 0 }],
+    accessible: { rooms: ['bath'], routes: [{ to: 'bath' }, { from: 'bath', to: 'bath' }] },
+  }
+
+  it('says the line in Spanish, with the same code, thing and ids, and no word of approval', () => {
+    const english = inspectPlan(room).lines.find((l) => l.code === 'plan/not-checked-access')!
+    const spanish = inspectPlan(room, { language: 'es' }).lines.find((l) => l.code === 'plan/not-checked-access')!
+    expect(spanish.message).toBe('Lo que el plano marca como que debe ser accesible (1 estancia y 2 recorridos) no se ha comprobado: Grid no tiene para ello ningún valor confirmado por una persona con nombre')
+    expect(spanish.found).toBe('marcado como que debe ser accesible: 1 estancia y 2 recorridos')
+    expect([spanish.kind, spanish.thing, spanish.also]).toEqual([english.kind, english.thing, english.also])
+    for (const text of [spanish.message, spanish.found, spanish.needed, spanish.fix]) {
+      expect(approvalWords(text)).toEqual([])
+      expect(text).not.toMatch(/\{[A-Za-z]/)
+    }
+  })
+})

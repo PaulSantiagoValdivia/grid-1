@@ -17,6 +17,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [What a drawing shows: `--hide`, `--colour` and `--key`](#what-a-drawing-shows---hide---colour-and---key)
 - [Stairs, lifts and the floor above on the drawing](#stairs-lifts-and-the-floor-above-on-the-drawing)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d), and a saved view: `--view`
+- [Sections, and the marks on a plan: `grid draw --section` and `--marks`](#sections-and-the-marks-on-a-plan-grid-draw---section-and---marks)
 - [A facade: `grid draw --facade`](#a-facade-grid-draw---facade)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
@@ -29,7 +30,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
-| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`); to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
+| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
@@ -433,7 +434,9 @@ Grid writes its own words in, the label first. Left out, the plan's own `display
 English. Spanish writes figures with a decimal comma unless the plan's `display.decimal` says
 `point`. Room names stay as the plan writes them, and the codes in brackets stay as they are. The
 Spanish words are a draft translation, not reviewed yet; see [Languages](languages.md). A
-language Grid does not write is refused by name.
+language Grid does not write is refused by name. `grid draw --section` and `--facade` take it too:
+the section's title, level names, list of what Grid took and the line on standard error follow it,
+and the level marks keep their decimal point.
 
 ## What a drawing shows: `--hide`, `--colour` and `--key`
 
@@ -516,6 +519,67 @@ model through that view's camera, with the floor it was saved with cut away, the
 plan has no view for is refused with the views it has. Not with `--floor`. The views and their
 camera record are in [the plan file](plan-file.md#saved-views-and-the-camera-record).
 
+## Sections, and the marks on a plan: `grid draw --section` and `--marks`
+
+`grid draw --section x1,y1:x2,y2` draws a section instead of a floor plan: a cut along the line
+from the first point of the plan to the second, in metres, through every floor, looking to the
+left of the line as you walk from the first point to the second, or to the right with
+`--toward right`. A person standing on the line and looking that way sees the section's left on
+the picture's left.
+
+```bash
+grid draw plan.json --section 4.9,-2:4.9,13 --png --out section.png
+```
+
+Everything on it is the model's own, as the 3D view, the IFC and the take-off read it (LVL-9):
+
+- **What the line cuts** is drawn solid in the walls' tone, under the heavy outline the plan's cut
+  walls have: the walls, with the sill and lintel round each door and window, the slab of each
+  floor (open over a stair, a lift shaft or a void), the roof and any parapet, the treads and
+  landings of a stair the plan states, and the floor of a raised room. Parts that touch are one
+  shape, not a rectangle each.
+- **What lies beyond the cut** is drawn in a lighter line, the one a facade draws its faces set
+  back in: the faces of walls, slab and roof edges and stairs that face you, with their doors and
+  windows open, each hiding what is behind it.
+- **The ground** is a facade's ground line, the heaviest pen, outside the building, running 1 m
+  past it on each side (`sectionGroundRun` in [tolerances.md](tolerances.md)), at the site's
+  ground level, or at the ground floor's level when the site states none.
+- **The levels** stand beside the drawing, in a facade's level-mark line: each floor's on the
+  left, each roof's and the ground's on the right, in metres from the ground floor's floor level,
+  as `±0.000`, `+2.950`.
+- **Each room cut** carries its name and its height, floor to ceiling: its own `height` when it
+  states one, else up to the slab or roof over its storey.
+- **What the plan does not state and Grid takes** is listed under the drawing, and hatched where
+  it is cut: a slab whose thickness the floor does not state, every roof (flat, as LVL-4 takes
+  it), a wall whose height nothing states or that the plan marks assumed. A level worked out from
+  the floors below, a ground level the site does not state, a room height taken from the storey,
+  a stair room with no stated stair and a stair's worked-out risers are listed, not hatched.
+  `grid draw` says on standard error how many it hatched and listed.
+- **A roof the floor states** (`floors[].roof`, LVL-6) stands at its eaves. A section does not
+  draw a sloped roof's slope yet, nor cut the walls under it to the roof: it draws the roof flat
+  at its eaves, hatched, and says so in the list.
+
+A section cuts every floor and writes its levels in metres, so `--floor`, `--hide`, `--colour`,
+`--key`, `--ids`, `--units` and `--decimal` are refused with it, by name; so are `--3d`,
+`--view` and `--facade`, and `--marks` with any of them.
+
+`--marks` adds the marks for the plan's other drawings to a floor plan, joined by commas:
+
+- `levels`: each room's floor level under its name, worked out as for the section;
+- `elevations`: a mark outside each of the plan's four main sides, 1.2 m beyond the drawing and
+  its dimensions (`elevationMarkOffset`), its arrow at the side it shows, named by the way that
+  side faces: by the north the plan states, else with north at the top of the drawing. Each is
+  the side `grid draw --facade` draws from the drawing's side nearest it, north at its top;
+- `section`: the line of `--section` as a chain line, heavy at its ends, with an arrow at each end
+  looking the way the section looks, named A. With `section` in `--marks`, `--section` marks the
+  plan instead of drawing the section.
+
+```bash
+grid draw plan.json --floor first --marks levels,elevations,section --section 4.9,-2:4.9,13
+```
+
+A plan drawn without `--marks` is drawn as before.
+
 ## A facade: `grid draw --facade`
 
 `grid draw --facade <side>` draws one side of the building in elevation (LVL-8): what a person
@@ -539,8 +603,9 @@ on the front plane, and lighter again the faces set back from it (by more than `
 hides what stands behind it.
 
 It takes `--png`, `--out`, `--look` and `--scale` (PNG only), as a plan does, and the label in its
-corner. It refuses `--3d`, `--view` and `--floor` (a facade shows every floor) and what belongs to
-a floor plan (`--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`), by name. Stairs
+corner. It refuses `--3d`, `--view`, `--section` and `--floor` (a facade shows every floor) and
+what belongs to a floor plan (`--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`,
+`--marks`), by name. Stairs
 stand inside and are not seen; a garden wall with no room behind it is not drawn. Under a roof a
 floor states (LVL-6), each wall is drawn to the top the roof leaves it, so a gable end is a
 gable, the roof's edges follow its slope, and each plane of it that comes down toward the side is

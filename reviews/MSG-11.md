@@ -454,3 +454,128 @@ The ratchet moves from 1125 to 1188; 2,184 literals in 119 files are listed in a
     (so "la linde este (tramo 2)"), "retranqueo" for set-back, "parcela", "ocupación de la
     parcela", and "cancela" for a gate. A floor's outline reason (`outline.ts`) inside the
     "not measured" notice stays English, as the other measures give it.
+
+## After merging main at e486ccba
+
+Main brought LVL-9 (sections drawn from the model, and level, elevation and section marks on a
+plan) and CNT-17 (accessibility measurements, as numbers only until a named person confirms a
+figure). Seven files conflicted: `CHANGELOG.md`, `docs/result-contract.md`, `command/draw.ts`,
+`command/main.ts`, `draw/views.ts`, `mcp/readTools.ts` and viewer `picture/planSvg.ts`. Main adds
+no tool (`kind=section` on `grid_view` and `what=access` on `grid_measure` are arguments) and one
+top-level plan field, `accessible`, which main already placed in `sheet/coverage.ts` and in the
+field list of `result.test.ts`. Main's English output is kept word for word.
+
+### How the conflicts were resolved
+
+- **`grid draw`** (`command/draw.ts`, `command/main.ts`): both sides' options stay: main's
+  `--section`, `--toward` and `--marks`, and `--lang`; the usage line lists them all, `--lang`
+  before `--project`. A section is drawn in the language asked for, else the plan's own, as a
+  facade is; main's `sectionAsked` result is named `drawing` in `drawFile`, as `asked` already
+  held the language. The marks go on the plan with MSG-11's display and language.
+- **`grid_view`** (`mcp/readTools.ts`): `language`, `cut` and `marks` are all arguments; MSG-11's
+  imports with main's `confirmedFigure`. `kind=section` passes the language to the picture
+  (`sectionAnswer`, `sectionView`); the answer's text and `data.section.assumed[].words` stay the
+  tool's English, as the facade's do. A plan's marks are drawn with its language
+  (`planView` takes both).
+- **The pictures** (`picture/planSvg.ts`, `draw/views.ts`): `language` and `marks` both in
+  `PictureOptions`; `planPicture` keeps MSG-11's words and main's marks; the elevation marks'
+  letters are `drawing.mark.faces.*` (N, NE … in English; N, NE, E, SE, S, SO, O, NO in Spanish).
+  A picture with a title and a key (a section, with its list under it) is named as main names it,
+  `{title}, and a key of what to look at` (`drawing.picture.titled.keyed`): MSG-11 had given a
+  titled picture its title alone, which no picture with a key had been until LVL-9.
+- **The section's words**: `geometry/section.ts`'s list of what Grid took is worded by key
+  (`drawing.section.taken.*`): each `SectionAssumption` carries its sentence as `said`, not
+  enumerable, and `words` is its English, as before. The viewer's `section.ts` says its title,
+  caption, key headings, roof and ground level names and room heights by key
+  (`drawing.section.*`), takes `language` and sets the picture's `language`, so the label and the
+  accessible name follow it. `grid draw --section`'s line on standard error is
+  `drawing.section.note*` (`drawSection.ts`).
+- **CNT-17's line** (`result/catalogue.ts`, `inspect.ts`): `plan/not-checked-access` is logic only
+  (`{}`) with `line.plan/not-checked-access.*` in both languages; its counts are
+  `line.part.accessCount.room|route.one|many`, joined with `join.and`; the stage is
+  `line.part.stage.accessible`. Main's contract row stays.
+- **Docs**: `CHANGELOG.md` keeps every Unreleased line; the contract keeps MSG-11's section first
+  of the day, with a line on CNT-17's code and LVL-9's section in Spanish, then main's CNT-17 and
+  LVL-9 sections. `docs/commands.md` and `docs/tool-server.md` say that a section's and a plan's
+  marks' words follow the language; `docs/languages.md` adds the section's and the mark's terms.
+
+New keys (52), in `en.ts` with main's English and in `es.ts` as a draft: `drawing.section.name`,
+`.title.one|many`, `.point`, `.line.left|right`, `.hatched`, `.listed`, `.roof`, `.ground`,
+`.height`, `.roofShape.mono-pitch|gable|hip`, `.taken.slab`, `.taken.roof.none|flat|sloped`,
+`.taken.wallHeight.one|many`, `.taken.marked.one|many`, `.taken.ground`, `.taken.level`,
+`.taken.roomHeight.one|many`, `.taken.noStair.one|many`, `.taken.risers`, `.note`,
+`.note.hatched.one|many`, `.note.listed.one|many` (34); `drawing.mark.faces.*` (8);
+`line.part.accessCount.room|route.one|many` (4), `line.part.stage.accessible`, and
+`line.plan/not-checked-access.says|found|needed|fix` (4); `drawing.picture.titled.keyed`.
+
+New tests: viewer `picture/__tests__/language.test.ts` (a Spanish section of the lab townhouse:
+title, caption with `(4,90; -2,00)`, levels, heights and every sentence of what was taken in
+Spanish; English as main draws it, with `said` not enumerable; the elevation marks' letters) and
+rules `result/__tests__/language.test.ts` (`plan/not-checked-access` in Spanish, same code, thing
+and ids, no word of approval).
+
+### The ownWords guard
+
+`geometry/section.ts`, viewer `drawingMarks.ts` and `draw/drawSection.ts` are at none, and are
+added to the list held at none. Listed:
+
+- *Shown to the person, not moved yet* (+49): `quantities/access.ts` 49, the `grid_measure
+  what=access` answer, as `sun.ts` and `site.ts` are.
+- *Command line* (+16): `command/section.ts` 6 (the refusals of `--section`, `--toward`, `--marks`),
+  `draw.ts` 34 → 44.
+- Not in the ratchet: `readTools.ts` 271 → 284 and `sectionAnswer.ts` 5 (tools);
+  `tolerances.ts` 197 → 201, `sheet/coverage.ts` 20 → 21 and viewer `picture/section.ts` 1 (its
+  width error, as `facade.ts`'s) (developer).
+
+The ratchet moves from 1188 to 1253.
+
+### Results after e486ccba
+
+- `npm run build`: `dist/grid.mjs` 538,894 bytes, under the 550,000 this merge was asked to hold and
+  under main's cap, which CNT-17 raised to 600,000 (`grid.e2e`); the Spanish chunk 145,973 bytes.
+  It is smaller than before the merge (548,593) and than main alone (555,889, by main's own
+  comment): the section's drawing and answer load only when a section is drawn (main's dynamic
+  imports of `drawSection` and `sectionAnswer`), and esbuild places a module shared by the main
+  file and a chunk in a shared chunk, so the split moved with main's new imports (as item 8
+  describes). Nothing was moved by hand and the cap was not touched.
+- `npm run typecheck`, `npm run lint`: clean.
+- Floorplan `messages/`, `geometry/` (LVL-9's `section.test.ts` among them), `types/` (CNT-17's
+  `accessible.test.ts`), all of `rules/src` (CNT-17's `confirmed.test.ts` and `access.test.ts`) and
+  viewer `picture/` (LVL-9's `section.test.ts`): 158 files, 3,612 tests pass (1 skipped). In the
+  first run the diff size guard (`diffs 1,000 entities … well inside a second`) took 22 s under
+  load; it passed in the full rerun.
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server, replay, LVL-9's
+  `sectionView` and CNT-17's `access` tests), `command/` (everyPath, grid.e2e, language.e2e) and
+  `quantities/`: 73 files, 940 tests pass (1 skipped). No expectation of main's changed; main's
+  tests and golden files pass unchanged.
+- By hand: `grid draw --section 2,-1:2,9 --toward right --lang es` on the two-bed flat names the
+  picture "Sección A–A, que corta 2 estancias", writes "Corte de (2,00; -1,00) a (2,00; 9,00),
+  mirando a la derecha de la línea…", the levels "+2.850 Cubierta" and "±0.000 Terreno", the
+  heights "2,60 m" and each thing taken in Spanish, and prints "La sección raya 2 partes y enumera
+  2 cosas que el plano no indica…" on standard error; without `--lang` it is main's English.
+  `grid check --lang es` on a plan marking a room accessible says "Lo que el plano marca como que
+  debe ser accesible (1 estancia) no se ha comprobado…".
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (e486ccba)
+
+20. **The ratchet was raised, 1188 to 1253.** CNT-17's `grid_measure what=access` answer (49
+    sentences in `quantities/access.ts`) is left in English, as the other `grid_measure` answers
+    (`sun.ts`, `site.ts`, `use.ts`) are: `grid_measure` takes no `language`, so moving its words
+    would give a Spanish no call can ask for. Moving the measuring answers together, with a
+    `language` on `grid_measure`, is follow-up work. LVL-9's refusals of `--section`, `--toward` and
+    `--marks` (16) are the command line's, as before. Everything a person sees on a section, on a
+    plan's marks, and in the record line about what is marked accessible is moved.
+21. **A section's decimal mark.** Main writes a section in metres whatever the plan's display says
+    (it refuses `--units` and `--decimal` with `--section`). So in English the section keeps the
+    point, as main draws it; in another language its heights, its line's points and the figures in
+    its list take the language's mark, or the one the plan's display states. The level marks
+    (`+2.850`, `±0.000`) keep their point in every language, as a facade's do. A point is written
+    `(2,00; -1,00)` in Spanish, a semicolon between the two figures.
+22. **`grid_view kind=section`'s text and `data.section.assumed[].words` stay English**, as the
+    facade's answer does: the agent retells them; the picture is in the language asked for.
+23. **Spanish terms to review**: "Sección A–A, que corta N estancias", "forjado" for slab, "alero"
+    for eaves, "rayado" for hatched, "Terreno" and "Cubierta" for the ground and roof levels,
+    "cubierta de una vertiente, a dos aguas, a cuatro aguas", "SO", "O" and "NO" on the elevation
+    marks, "recorrido" for a route, and "el programa de necesidades" for the brief in the
+    accessibility line. All are drafts, in `docs/languages.md`'s table.
