@@ -113,3 +113,17 @@ look at (lab MS-1, AU3-3, W-5).
   and counts the drawing's issues, not the record, so its counts do not see these lines.
   Counting them would raise `soundPlansWithAlarm` for plans with made-up fields.
 - **The sheet** (`grid sheet`) is not on the record yet (MSG-1), so it does not show these lines.
+
+## Checks run (on top of main fc78ff7, with CNT-12 and MSG-18)
+
+The machine was under load of 220 to 270 the whole time, from the parallel sessions.
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `npx vitest run --exclude '.claude/**'`: 4,251 of 4,253 pass. Two timing tests fail, both
+  under load: `grid.e2e.test.ts` "answers grid check on the sample flat in under half a second"
+  (median 4.0 s) and `diff-size.test.ts` "the size guard" (21.9 s). Run alone, the size guard
+  passes; the speed test still fails at 4.1 s with the load at 268. Run by hand,
+  `grid check packages/cli/fixtures/two-bed-flat.json` takes 0.18 to 0.46 s, so the time goes to
+  starting processes under load. The reading walk is one pass over the file's keys.
+- `npm run scoreboard`: "Same as the stored figures"; no count moved.
