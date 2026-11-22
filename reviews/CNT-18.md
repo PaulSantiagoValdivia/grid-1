@@ -49,7 +49,8 @@ under "For the owner".
   takes the start, or off the circle) and `wall/arc-too-tight` (a radius no more than half the
   thickness). An opening's fit is checked against the length along the curve. A curved wall's
   centre and sweep are numbers like any other (`wall/too-large`).
-- **The exports.** The DXF writes a curved wall's faces as true arcs (an R12 `POLYLINE` with a
+- **The exports.** The DXF writes a curved wall's faces as true arcs (since HND-1, an `LWPOLYLINE`
+  and a `HATCH` loop with bulges; before it, an R12 `POLYLINE` with a
   bulge on each curved stretch) and a curved dividing line as an `ARC` or a `CIRCLE`. The IFC
   writes its `Axis` as an `IfcTrimmedCurve` on an `IfcCircle`, its body as an extruded outline of
   pieces (a whole circle as a ring with a void), and each opening as a void and filler on its
@@ -218,6 +219,26 @@ room is measured as before.
   `scoreboard/__tests__`, two workers: 255 of 255 files passed, 4,638 tests passed and 4
   skipped, exit 0. The full suite was not run again.
 
+- After merging main at 8a43380 (HND-1: a DXF in AutoCAD 2013's version, in metres, with named
+  layers, pens, a hatch per wall, opening blocks, room tags and a paper layout): seven conflicted
+  files, each kept both sides (see the merge commit). HND-1 rewrote the DXF as a whole document, so
+  its file was taken whole and CNT-18 put back into it: a light polyline and a hatch loop take a
+  bulge per vertex and there is a `CIRCLE`; a curved wall's outline (on HND-1's outside or inside
+  wall layer) and its solid fill (on the fill layer) have its faces as true arcs, with HND-1's
+  pens; a curved dividing line is an `ARC`, or a `CIRCLE` all the way round, on the dividing-line
+  layer; the approximation note follows the left-out note on its layer, wrapped to the text cap; a
+  curved wall's facts sit at the middle of its curve. HND-1's room tags take the room's area from
+  the drawing, which follows the curve; its door and window blocks sit on each opening's chord,
+  the straight hole. No convention was taken: the curved wall stays C13. The curved-wall DXF tests
+  now read the document's entities (the outline's and the fill's bulges, four half-circle bulges
+  for a whole circle with no opening, the `ARC` on the dividing-line layer). The bundle is
+  530,344 bytes, under the 550,000 budget. Results: `npm run build` clean; `npm run typecheck`
+  clean; `npm run lint` clean; `npm run scoreboard` "Same as the stored figures."; all of
+  `packages/floorplan/src`, `packages/rules/src/result`, the CLI's `mcp`, `quantities`, `edit`,
+  `describe`, `command/__tests__` and `sheet`, the viewer and `scoreboard/__tests__`, two workers:
+  257 of 257 files passed, 4,657 tests passed and 4 skipped, exit 0. The full suite was not run
+  again.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -290,3 +311,8 @@ room is measured as before.
     floor's outline, one per straightened edge, with a line between them: the curve reads as
     facets, each within 1 cm of it. A sloped roof (LVL-6) does not cut a curved wall's top: it
     stands at its own height under the roof in 3D, in the IFC and on the facade.
+13. **HND-1's DXF and a curved wall.** The wall's outline and its hatch keep their arcs (bulges),
+    so a CAD program shows and fills the true curve; the room outlines along it are still straight
+    pieces (named in the note), and so is the room tag's area, which is the drawing's (0.016%
+    under the true circle for the round room). A project's DXF profile renames the layers; the
+    curves go on whatever it names for walls, fill and dividing lines.
