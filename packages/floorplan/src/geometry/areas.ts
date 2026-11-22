@@ -37,6 +37,7 @@ import { validatePlan } from './validate'
 import { floorJoins } from './floorJoins'
 import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { roomZones } from './zones'
+import { statedOutline } from './massing'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { wallLength, wallSegments } from './wall'
@@ -171,6 +172,8 @@ export interface FloorAreaFigures {
   readonly offSpace: number | null
   /** Why a gross figure is null, in a sentence; null when both are known. */
   readonly why: string | null
+  /** BRF-4 (C17): the floor is massing, an outline it states with no walls yet: gross external only. */
+  readonly massing: boolean
 }
 
 /** A total, with the rule it follows. */
@@ -422,10 +425,16 @@ function floorFigures(
 
   const spaces = floorSpaces(plan, floor, { index, broken })
   if (!spacesKnown(spaces)) {
-    return { ...base, grossExternal: null, grossInternal: null, walls: null, outerWalls: null, unclaimed: null, offSpace: null, why: `the walls' outline could not be worked out: ${spaces.reason}` }
+    return { ...base, grossExternal: null, grossInternal: null, walls: null, outerWalls: null, unclaimed: null, offSpace: null, why: `the walls' outline could not be worked out: ${spaces.reason}`, massing: false }
   }
   const offSpace = spaces.roomArea - (spaces.floorArea - spaces.unclaimedArea)
-  const inside = insideFace(floorWalls(plan, floor, broken), spaces, sides())
+  const walls = floorWalls(plan, floor, broken)
+  if (walls.length === 0 && statedOutline(plan, floor) !== null) {
+    // BRF-4 (C17): massing, an outline with no walls yet. Its outline is its outside face; it has
+    // no inside face of walls to measure to until the walls are drawn.
+    return { ...base, grossExternal: spaces.outlineArea, grossInternal: null, walls: 0, outerWalls: null, unclaimed: spaces.unclaimedArea, offSpace, why: MASSING_WHY, massing: true }
+  }
+  const inside = insideFace(walls, spaces, sides())
   const known = typeof inside === 'number'
   return {
     ...base,
@@ -436,8 +445,13 @@ function floorFigures(
     unclaimed: spaces.unclaimedArea,
     offSpace,
     why: known ? null : inside,
+    massing: false,
   }
 }
+
+/** BRF-4: why a massing floor has no gross internal area. */
+export const MASSING_WHY = 'it is an outline with no walls yet, so there is no inside face of its walls to measure to; its gross external area is its outline'
+
 
 /**
  * SHT-11, lab DR-5: the stair rooms whose floor is counted with a stair room below, by floor and
@@ -537,8 +551,17 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
   if (leftOut.length > 0) {
     notes.push(`Left out of every figure, because Grid could not draw ${leftOut.length === 1 ? 'it' : 'them'}: ${leftOut.map((r) => JSON.stringify(r.name)).join(', ')}. grid_check says why.`)
   }
-  const unclaimed = sum(floors.map((f) => f.unclaimed ?? 0))
-  if (unclaimed >= reported) notes.push(`${unclaimed.toFixed(2)} m² of floor inside the walls belongs to no room: it is in the gross figures only.`)
+  const massing = floors.filter((f) => f.massing)
+  if (massing.length > 0) {
+    const names = new Map(planFloors(plan).map((f) => [f.id, f.name || f.id] as const))
+    notes.push(
+      `${massing.length === 1 ? 'Floor' : 'Floors'} ${massing.map((f) => JSON.stringify(names.get(f.floor) ?? f.floor)).join(', ')} ${massing.length === 1 ? 'is' : 'are'} massing, ` +
+        `an outline with no walls yet: gross external area only, to the outline as stated, and no net or gross internal area until the walls and rooms are drawn.`
+    )
+  }
+  const unclaimed = sum(floors.filter((f) => !f.massing).map((f) => f.unclaimed ?? 0))
+  const where = floors.some((f) => statedOutline(plan, f.floor) !== null) ? "inside the walls, or inside a floor's stated outline," : 'inside the walls'
+  if (unclaimed >= reported) notes.push(`${unclaimed.toFixed(2)} m² of floor ${where} belongs to no room: it is in the gross figures only.`)
   const off = sum(floors.map((f) => Math.abs(f.offSpace ?? 0)))
   if (off >= reported) notes.push(`${off.toFixed(2)} m² of the rooms' floor is counted twice, or lies on walls or outside them, so net plus walls plus unclaimed floor is not the gross; grid_check names the rooms.`)
   const outsideRooms = sum(floors.map((f) => f.outsideRooms))

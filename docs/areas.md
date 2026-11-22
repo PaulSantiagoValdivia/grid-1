@@ -52,10 +52,20 @@ In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(cou
 `grid_areas` tool ([tool-server.md](tool-server.md)) prints each figure with its rule, takes
 `country` and `gross`, and marks each figure's state ([result-contract.md](result-contract.md)).
 
+A floor may state its outline before any wall (BRF-4,
+[plan-file.md](plan-file.md#a-floor-outline-before-the-walls)). On a floor with walls the outline is
+joined with what they enclose, and floor inside it that no wall encloses is floor no room claims,
+in both gross figures. A floor with an outline and no walls is massing: its gross external area
+is the area inside its outline, and it has no net area and no gross internal area, since there is
+no inside face of walls to measure to; the answer names the massing floors. `grid_areas` also
+counts the storeys, by level, from the floors that hold an outline or walls that close one.
+
 The site's things (BRF-3: fences, gates, paths, paving, trees and pools) are in no area: they are
 never rooms. The plot coverage, the building's shape seen from above against the plot's area, is
 not one of these figures: `grid_measure` with `what=site` gives it, from the outside face of every
 floor at or above the ground floor ([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)).
+A floor area ratio the person gives is measured there too, by the gross measure they name: the
+figure's name and what it measures are said with it.
 
 ## Schedules
 

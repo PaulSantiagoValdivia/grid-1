@@ -76,7 +76,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C17)', () => {
+describe('a curved wall in the plan file (C21)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -603,5 +603,19 @@ describe('a point on a curve, by how far along it lies (CNT-18)', () => {
     // Below the bay's centre, just past its start (4, 3) and its end (0, 3).
     expect(curveAlong(bay, { x: 3.9, y: 2 })).toBe(0)
     expect(curveAlong(bay, { x: 0.1, y: 2 })).toBeCloseTo(bay.length, 9)
+  })
+})
+
+describe('a curved wall inside a floor outline (BRF-4 with CNT-18)', () => {
+  it('joins the round wall with the outline the floor states: the slab is the square, and nothing reaches past it', () => {
+    const square = [[1, 1], [9, 1], [9, 9], [1, 9]]
+    const plan = parseFloorPlan({ ...roundRoom(), floors: [{ id: 'ground', name: 'Ground floor', level: 0, outline: square }] })
+    expect(planEnvelope(plan).slabArea).toBeCloseTo(64, 6)
+    // A smaller outline: the drum reaches past it, and the slab is the two joined.
+    const small = parseFloorPlan({ ...roundRoom(), floors: [{ id: 'ground', name: 'Ground floor', level: 0, outline: [[4, 4], [12, 4], [12, 6], [4, 6]] }] })
+    const disc = Math.PI * 3.1 * 3.1
+    const joined = planEnvelope(small).slabArea!
+    expect(joined).toBeGreaterThan(disc)
+    expect(joined).toBeLessThan(disc + 16)
   })
 })

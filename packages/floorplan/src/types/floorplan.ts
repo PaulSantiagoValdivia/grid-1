@@ -152,7 +152,19 @@
  *   own work, are read into the plan as existing and are never written back to it; the plan's own
  *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C17 · A curved wall (CNT-18)
+ * C17 · Floor outlines (BRF-4, lab FD-1)
+ *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
+ *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
+ *   covers, its roof is cut from and its gross external area is measured to: joined with what
+ *   the floor's walls enclose, so a floor with walls and no outline reads exactly as before. A
+ *   floor with an outline and no walls is massing: its level, height (C5) and kind of building
+ *   (`building`, CNT-5) give its gross area and its storey, and nothing inside it is checked.
+ *   Floor inside the outline that no room claims is floor no room claims. A floor MAY also state
+ *   how many `homes` it holds and how many `parking` spaces: the agent's proposal, which Grid
+ *   counts against the person's own limits and never brings a figure for. All three are optional
+ *   and never defaulted (version 1).
+ *
+ * C21 · A curved wall (CNT-18)
  *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
  *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
  *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
@@ -169,6 +181,7 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
 export * from './facts'
@@ -380,6 +393,23 @@ export const FloorSchema = z.object({
   building: BuildingTypeSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
+  // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
+  // and the gross external area. Optional and never defaulted (version 1).
+  outline: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    })
+    .optional(),
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
+  // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
+  homes: z.number().int().min(0).max(PARTS_MAX).optional(),
+  parking: z.number().int().min(0).max(PARTS_MAX).optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -492,7 +522,7 @@ function shiftedLine(start: Pair, end: Pair, by: number): [[number, number], [nu
   ]
 }
 
-/** CNT-18 (C17): a curved wall's arc, as a file states it, when it can be read. */
+/** CNT-18 (C21): a curved wall's arc, as a file states it, when it can be read. */
 export interface WallCurveOf {
   readonly centre: Pair
   readonly sweep: number
@@ -627,7 +657,7 @@ export function heightByDefault(
 }
 
 /**
- * CNT-18 (C17): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * CNT-18 (C21): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
  * and never more than a whole turn.
  */
 export const WallArcSchema = z.object({
@@ -655,7 +685,7 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
-      // CNT-18 (C17): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // CNT-18 (C21): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
       // Optional and never defaulted: unstated, the wall is straight (version 1).
       arc: WallArcSchema.optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).

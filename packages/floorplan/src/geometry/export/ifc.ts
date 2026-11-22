@@ -1205,7 +1205,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   const { w } = c
   const { wall } = element
 
-  // CNT-18: in a curved wall the hole is the straight chord between the opening's edges (C17),
+  // CNT-18: in a curved wall the hole is the straight chord between the opening's edges (C21),
   // placed there and as wide as that chord, and deep enough to cut through both faces where
   // they bow away from it.
   const span = openingSpan(opening)

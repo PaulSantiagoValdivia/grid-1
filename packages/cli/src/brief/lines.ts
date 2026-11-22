@@ -19,6 +19,8 @@ import { planAreas, type RoomArea } from '../quantities/areas'
 import { measureRoom, roomHeight } from '../quantities/measure'
 import { planSchedule } from '../quantities/schedule'
 import { surveyPlan, type Survey } from '../quantities/survey'
+import { METRES } from '@ongrid/floorplan/types/units'
+import { isSiteFigure, siteLimits } from '../quantities/limits'
 import { FIGURES, FIGURES_HEADING, type Brief, type FigureWish, type Level, type Source } from './brief'
 
 /** How a line stands: `met`, `missed`, `open` (nothing to measure yet), or `differs` (a size in a room's name). */
@@ -341,7 +343,17 @@ export function briefLines(plan: FloorPlan | null, brief: Brief | null): BriefLi
   const lines: BriefLine[] = []
   if (brief !== null) {
     lines.push(...roomLines(c, brief), ...footprintLines(c, brief), ...touchLines(c, brief))
-    for (const wish of brief.figures) lines.push(...figureLines(c, wish))
+    for (const wish of brief.figures) if (!isSiteFigure(wish.figure)) lines.push(...figureLines(c, wish))
+    // BRF-4: the person's site limits, measured on the plan as drawn, massing or walls.
+    const site = brief.figures.filter((wish) => isSiteFigure(wish.figure))
+    if (site.length > 0) {
+      for (const limit of siteLimits(c.plan, site, METRES)) {
+        if (limit.limit === 'setback') continue
+        const wish = site.find((w) => w.figure === limit.limit)!
+        const state: BriefState = limit.state === 'met' ? 'met' : limit.state === 'missed' ? 'missed' : 'open'
+        lines.push(line(state, wish, wish.figure, limit.text, { asked: `${limit.most ? 'at most' : 'at least'} ${asWritten(limit.allowed)}`, drawn: limit.used === null ? null : n2(limit.used), unit: limit.unit }))
+      }
+    }
     for (const wish of brief.open) lines.push(line('open', { level: null, source: 'given', quote: wish.quote }, 'open', `${q(wish.quote)}${wish.about === null ? '' : `: still to ask, ${wish.about}`}.`))
   }
   lines.push(...nameLines(c, brief))

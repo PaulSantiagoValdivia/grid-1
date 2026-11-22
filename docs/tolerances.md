@@ -55,6 +55,10 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `roomsWallWidest` | tolerance | 0.6 m | The widest gap between two rooms written rooms first that is still one wall between them; a wider gap that is not a room is refused |
 | `roomsTouch` | tolerance | 0.02 m | Rooms written rooms first closer than this touch with no wall between them, refused unless they are open to each other |
 | `roomsFaceStep` | tolerance | 0.002 m | Faces of rooms written rooms first further out of line than this are named as sizes that do not add up |
+| `scanFaceTurn` | tolerance | 0.0872 sine | Two scanned wall faces, or a scanned floor outline's edge and a face, within about 5 degrees of each other may be one wall's two faces, or the same face (HND-12) |
+| `scanFaceReach` | tolerance | 0.05 m | An edge of a scanned floor outline this close to a scanned wall face lies on that face (HND-12) |
+| `scanCornerGap` | tolerance | 0.15 m | In a scan with no floor outline, wall faces whose ends are this close meet at a corner of the room (HND-12) |
+| `scanOnFloor` | tolerance | 0.05 m | A scanned door or opening whose bottom is this close to the floor stands on it, with a sill of 0 (HND-12) |
 | `diffLength` | tolerance | 0.001 m | Lengths closer than this are unchanged between two versions of a plan |
 | `diffMovement` | tolerance | 0.01 m | A change held to a scope that moved less than this is rounding, not an edit |
 | `diffSameLine` | tolerance | 0.01 m | A removed and an added wall this close to one line may be the same wall |

@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C17 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C21 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -336,6 +336,35 @@ room is measured as before.
   tests, passed. The affected suites were stopped after 321 files, all passed (5,642 tests),
   when main moved to 65e37ca1; they were run again after that merge.
 
+- After merging main at 65e37ca1 (BRF-4, HND-12): six conflicts, each kept both sides.
+  - `CHANGELOG.md`: CNT-18's line, then HND-12's and BRF-4's.
+  - `docs/result-contract.md`: CNT-18's entry on top of the changelog for agents, then HND-12's
+    and BRF-4's.
+  - `grid.e2e.test.ts`: HND-12's 650 kB cap and comment, and a line for the merged size.
+  - `cli/src/mcp/readTools.ts`: the import takes both `wallPointAt` (CNT-18) and `planStoreys`
+    (BRF-4).
+  - `geometry/outline.ts`: a curved wall is still joined as its straight pieces, and BRF-4's
+    stated outline is joined with them (`statedOutline`, `outlineFarReason`).
+  - `types/floorplan.ts`: BRF-4's C17 (floor outlines), then the curved wall.
+
+  **The convention is C21, by the coordinator's assignment**, so that the features in flight do
+  not clash: CNT-10 holds C16 and BRF-4 C17 on main, and C18 to C20 are left for the others.
+  It is C21 in the header of `types/floorplan.ts`, every CNT-18 mention in the packages, the
+  `arc.ts` bullet in `AGENTS.md` and this review; the history above keeps the numbers it had.
+
+  Main's new code was checked for straight walls: HND-12's scan writes straight walls of its
+  own, and BRF-4's outlines are joined with what the walls enclose, which `spaces.ts` and
+  `outline.ts` already take by straight pieces. Nothing else assumed a straight wall. One test
+  added: a round building inside a stated outline (the slab is the outline's square, and with a
+  smaller outline the two joined).
+
+  Results: `npm run build` clean, the bundle 623,324 bytes, under HND-12's 650,000 cap, so the
+  cap was not raised; `npm run typecheck` clean; `npm run lint` clean; `npm run scoreboard`
+  "Same as the stored figures."; all of `packages/floorplan/src`, `packages/rules/src`,
+  `packages/cli/src`, `packages/viewer` and `scoreboard/__tests__`, two workers: 331 of 331
+  files passed, 5,700 tests passed and 4 skipped, exit 0. Main had moved on to ed8b9f75 (CNT-4)
+  by then; that is not merged here.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -347,7 +376,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C17) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C21) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |
