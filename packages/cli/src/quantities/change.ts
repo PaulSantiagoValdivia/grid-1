@@ -59,7 +59,7 @@ export interface ChangeEstimate extends Estimate {
 const size = (value: number): string => String(Math.round(value * 1000) / 1000)
 const metres = (value: number): string => value.toFixed(2)
 
-const KIND_ORDER = { exterior: 0, interior: 1, partition: 2 } as const
+const KIND_ORDER = { exterior: 0, separating: 1, interior: 2, partition: 3 } as const
 const TYPE_WORDS = { door: 'Door', window: 'Window', opening: 'Doorless opening' } as const
 
 /** How much of an opening's hole lies in its wall: its width by its height up to the wall's top, `top` above its floor. */

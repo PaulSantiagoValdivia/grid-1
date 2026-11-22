@@ -134,12 +134,14 @@ In `packages/cli/src/mcp/__tests__/namedTypes.test.ts` (13 tests) and
    material named after the kind (`Interior wall`) said what the plan does not hold (AU3-4). It
    changes every IFC Grid writes by two lines (the golden files). The layer set and type names
    (`Exterior wall 0.3 m`) stay. A door or window of no type still carries no material.
-5. **A wall type's kind is the wall kinds' own list** (`WallKindSchema`), so CNT-6's `separating`
-   kind is a kind a type may state the moment CNT-6 lands, with no second kind added here; the
-   tool's kind list and its description are built from that schema. On CNT-6's branch the only
-   overlap is adjacent additions (the same lists in `floorplan.ts`, `validate.ts`, `catalogue.ts`,
-   `coverage.ts`, `readTools.ts` and the test lists); whichever lands second joins both. Not yet
-   merged here: `main` did not have CNT-6 when this was finished.
+5. **Lined up with CNT-6.** A wall type's kind is the wall kinds' own list (`WallKindSchema`),
+   so CNT-6's `separating` is a kind a type may state, with no second kind added: a party wall
+   type gives its walls `separating`, which CNT-6's route and beyond checks read, and the IFC
+   types them by the type, element type `Separating wall` (tested in `partTypes.test.ts`). The
+   tool's kind list and description are built from that schema. Merging `main` at c7ae5613
+   (CNT-6) conflicted only on adjacent additions (both features' plan fields, issue calls,
+   catalogue groups, sheet coverage, conventions C23 then C24, the known-field lists in two tests
+   and the words ratchet, which now adds both: 1511 + 29 = 1540).
 6. **Defaults by wall kind.** A wall that states no kind is read as `interior` for its default.
    A default fills the type's id too, which is not written back.
 7. **Two rooms with different finishes merge only as zones,** as two uses already do (CNT-8).

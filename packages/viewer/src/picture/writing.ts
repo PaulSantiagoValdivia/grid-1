@@ -133,7 +133,9 @@ export function keyEntries(
   const entries: KeyEntry[] = []
   const solid = drawing.walls.filter((wall) => !wall.virtual && wall.phase === undefined)
   if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.outsideWall') })
-  if (solid.some((wall) => wall.exposure !== 'exterior')) entries.push({ swatch: 'fill', color: look.wall, words: say('drawing.key.insideWall') })
+  // CNT-6: a party wall, or one to the common parts, drawn as an outer wall of the home is.
+  if (solid.some((wall) => wall.exposure === 'separating')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.separatingWall') })
+  if (solid.some((wall) => wall.exposure !== 'exterior' && wall.exposure !== 'separating')) entries.push({ swatch: 'fill', color: look.wall, words: say('drawing.key.insideWall') })
   // CNT-10: a plan with phases keys its walls by what the work does to them.
   const phased = drawing.walls.filter((wall) => !wall.virtual && wall.phase !== undefined)
   const phases = shown.phases

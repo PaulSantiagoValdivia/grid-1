@@ -11,6 +11,7 @@ import type { Floor, FloorPlan, Wall } from './plan'
 import { indexPlan } from './plan'
 import { validatePlan } from './validate'
 import { wallPeak } from './roofs'
+import { buildingOfFloor } from './buildings'
 
 /** What a storey with no drawn wall counts as: the plan's default wall height. */
 export const DEFAULT_STOREY_HEIGHT = 2.7
@@ -191,11 +192,28 @@ function floorsOf(plan: FloorPlan): Floor[] {
  */
 export function floorElevations(plan: FloorPlan): BuildingElevations {
   const floors = floorsOf(plan)
-  const byFloor = stackFloors(
-    floors.map((floor) => ({ floor, tallest: tallestDrawnWall(plan, floor) })),
-    SLAB_THICKNESS
-  )
+  const entries = floors.map((floor) => ({ floor, tallest: tallestDrawnWall(plan, floor) }))
+  // CNT-6 (C23): each building the plan names stacks its own floors; the floors no building names
+  // are stacked together, as every floor was before.
+  const building = buildingOfFloorSafe(plan)
+  const groups = new Map<string, FloorToStack[]>()
+  for (const entry of entries) {
+    const key = building.get(entry.floor.id) ?? ''
+    groups.set(key, [...(groups.get(key) ?? []), entry])
+  }
+  const byFloor = new Map<string, StoreyLevel>()
+  for (const group of groups.values()) for (const [id, level] of stackFloors(group, SLAB_THICKNESS)) byFloor.set(id, level)
   return { floors: byFloor, roof: roofOver(byFloor) }
+}
+
+/** The building each floor is in (CNT-6), or none when the list cannot be read. */
+function buildingOfFloorSafe(plan: FloorPlan): ReadonlyMap<string, string> {
+  if ((plan.buildings ?? []).length === 0) return new Map()
+  try {
+    return buildingOfFloor(plan)
+  } catch {
+    return new Map()
+  }
 }
 
 /** The roof slab over the highest storey top of the stack, or over one default storey when there is none. */

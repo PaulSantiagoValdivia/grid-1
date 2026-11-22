@@ -89,7 +89,7 @@ const size = (value: number): string => String(Math.round(value * 1000) / 1000)
 /** A size as the line's words write it. */
 const metres = (value: number): string => value.toFixed(2)
 
-const KIND_ORDER = { exterior: 0, interior: 1, partition: 2 } as const
+const KIND_ORDER = { exterior: 0, separating: 1, interior: 2, partition: 3 } as const
 
 /** The lines of a first estimate for the plan, or for the floors given. */
 export function planEstimate(survey: Survey, options: { floors?: readonly string[] } = {}): Estimate {

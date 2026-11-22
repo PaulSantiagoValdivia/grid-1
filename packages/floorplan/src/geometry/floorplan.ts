@@ -24,6 +24,8 @@ import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
 import type { PlanNote, PlanSketch } from './writing'
 import { planNotes, planSketch, sketchExtent } from './writing'
+import { contextOn } from './buildings'
+import { boundaryEdgeCount } from '../types/floorplan'
 import { planOrientation } from './orientation'
 import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
@@ -279,6 +281,12 @@ export interface PlanDrawing {
    * when the floor states none.
    */
   readonly outline?: readonly Vec2[]
+  /**
+   * CNT-6 (C23): the context shapes drawn round the plan on this floor (a neighbour's house, the
+   * hall a stand stands in), each its outline's corners in order. Drawn only: in no measure or
+   * check. Left out when the floor has none.
+   */
+  readonly context?: readonly { readonly id: string; readonly name: string | null; readonly points: readonly Vec2[] }[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -517,7 +525,13 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   const statedRing = drawnFloor === null ? null : statedOutline(plan, drawnFloor)
   const floorRing = statedRing === null ? null : statedRing[0]!.slice(0, -1).map(([x, y]) => ({ x, y }))
   if (floorRing !== null) extent.push(...floorRing)
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), bounds: computeBounds(extent), issues }
+  // CNT-6 (C23): the context round the plan, on the floor drawn; framed with it.
+  const context = (drawnFloor === null ? [] : contextOn(plan, drawnFloor)).map((shape) => {
+    const ring = boundaryEdgeCount(shape.points) === shape.points.length ? shape.points : shape.points.slice(0, -1)
+    return { id: shape.id, name: shape.name ?? null, points: ring.map(([x, y]) => ({ x, y })) }
+  })
+  for (const shape of context) extent.push(...shape.points)
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), ...(context.length === 0 ? {} : { context }), bounds: computeBounds(extent), issues }
 }
 
 /**

@@ -49,8 +49,8 @@ describe('a field Grid does not know', () => {
     delete wall.thickness
     wall.thick = 0.3
     expect(fields(readingNotes(raw))).toEqual([
-      // LVL-5: a wall's fields hold through, the highest floor it rises through; CNT-18 adds arc, CNT-10 phase, HND-11 face, CNT-15 wallType.
-      { kind: 'unknown-field', field: 'thick', at: 'walls[0]', part: { list: 'walls', index: 0 }, nearest: 'thickness', nearestWritten: false, known: ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'through', 'arc', 'properties', 'phase', 'face', 'wallType'] }
+      // LVL-5: a wall's fields hold through, the highest floor it rises through; CNT-18 adds arc, CNT-10 phase, HND-11 face, CNT-6 beyond, CNT-15 wallType.
+      { kind: 'unknown-field', field: 'thick', at: 'walls[0]', part: { list: 'walls', index: 0 }, nearest: 'thickness', nearestWritten: false, known: ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'through', 'arc', 'properties', 'phase', 'beyond', 'face', 'wallType'] }
     ])
   })
 

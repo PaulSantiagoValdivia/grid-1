@@ -55,6 +55,17 @@ export type FindingCode =
   /** LVL-1: a door or opening to the outside on a floor standing above the ground; never a way out. */
   | 'door_to_outside_above_ground'
   /**
+   * CNT-6 (lab EL-4): a door, a doorless opening or an open side between rooms of two different
+   * flats (CNT-4), or a door through a wall the plan says has a neighbour beyond it. Never a route:
+   * a home is not left through another. Its rooms are the room, then the other home's room.
+   */
+  | 'door_between_homes'
+  /**
+   * CNT-6 (lab R-10): a flat none of whose doors opens onto a room in no flat, a common part the
+   * plan does not draw, a space not drawn or the outside. Its rooms are the flat's.
+   */
+  | 'flat_without_front_door'
+  /**
    * LVL-3: rooms used as a stair on two neighbouring levels, none lying over one on the other, so
    * they join nothing. On the upper floor; its rooms are the upper level's, then the lower's.
    */
@@ -112,6 +123,8 @@ export interface RuleFinding {
    * Optional, so the report stays at schema version 1.
    */
   readonly through?: readonly RouteStep[]
+  /** CNT-6: only on `flat_without_front_door`, the flat's id (CNT-4). */
+  readonly flat?: string
   /**
    * Only on `door_to_outside_above_ground`: how far the floor stands above the ground, in m, as
    * the message says it. Optional, like `through` (MSG-1: the notes word it from this).
@@ -183,6 +196,11 @@ export type NotCheckedReason =
    * does. Whether that space is a way out cannot be told, so the routes were not checked.
    */
   | 'way_out_not_drawn'
+  /**
+   * CNT-6 (lab R-10): the same, where every way on from the floor is onto the building's common
+   * parts that are not drawn: a flat's front door onto a landing, a stand's open side onto the aisle.
+   */
+  | 'way_out_through_common_parts'
   /**
    * BRF-3: the site states a boundary, but the building's outline could not be worked out, so no
    * distance to it was measured and no set-back compared.

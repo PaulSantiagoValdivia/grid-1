@@ -149,6 +149,23 @@ describe('CNT-15 a part takes what its type gives', () => {
   })
 })
 
+describe('CNT-15 with CNT-6: a party wall type is a separating wall (lab AC-5)', () => {
+  it('gives the walls of a separating type the kind CNT-6 reads, and the IFC types them apart from partitions', () => {
+    const raw = typedFlat() as Raw & { walls: Raw[]; types: { walls: Raw[] } }
+    raw.types.walls.push({ id: 'party', name: 'Party wall 250', thickness: 0.25, kind: 'separating', material: 'Concrete' })
+    const party = raw.walls.find((w) => w['wallType'] === 'stud')!
+    party['wallType'] = 'party'
+    delete party['kind']
+    const plan = parseFloorPlan(raw)
+    const read = plan.walls.find((w) => w.id === party['id'])!
+    expect([read.kind, read.thickness, read.typed]).toEqual(['separating', 0.25, ['thickness', 'kind']])
+    const doc = parseStep(toIfc(plan))
+    const type = ofType(doc, 'IFCWALLTYPE').find((t) => str(t.args[7]) === 'wall-type:party:0.25')!
+    expect([str(type.args[2]), str(type.args[8])]).toEqual(['Party wall 250', 'Separating wall'])
+    expect(ofType(doc, 'IFCMATERIAL').map((m) => str(m.args[0]))).toContain('Concrete')
+  })
+})
+
 describe('CNT-15 the drawing\'s check names a type that is not there', () => {
   it('says a wall, a door and a default that name no type the plan has, with the type most likely meant', () => {
     const raw = typedFlat() as Raw & { walls: Raw[]; openings: Raw[]; types: Raw }

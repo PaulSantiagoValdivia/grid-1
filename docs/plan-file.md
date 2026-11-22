@@ -50,8 +50,8 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name, a building's or a context shape's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id, a building's id and floors, a context shape's id and floor | 64 characters | the same |
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
@@ -59,10 +59,11 @@ file never reaches the exports with its letters turned into question marks. A fi
 | the wall types, door types or window types | 50,000 of each | |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats or flat types | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings or context shapes | 50,000 of each | |
+| the floors one building lists | 50,000, and at least one | |
 | the rooms one flat lists | 50,000, and at least one | |
 | the floors one opening pattern repeats on | 200 | |
-| the points of the site's boundary, of one of its things, or of a floor's outline | 2,000 | |
+| the points of the site's boundary, of one of its things, of a floor's outline or of a context shape | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
@@ -644,6 +645,76 @@ Both lists are optional and never defaulted, so a plan written before them reads
 added (version 1). Grid's edits do not carry a flat yet: a room merged or split away is named by
 `flat/unknown-room` until the flat lists the room that is there now.
 
+## Part of a larger building
+
+Read this when the plan is a flat on the fourth floor, a stand in a hall, or a house drawn with its
+neighbours. A plan can say it is part of a larger building (CNT-6, C23), so Grid describes it as
+what it is, with no false alarms.
+
+```json
+"walls": [
+  { "id": "party", "start": [6, 0], "end": [6, 6], "kind": "separating" },
+  { "id": "entrance", "start": [0, 0], "end": [3, 0], "kind": "separating", "beyond": "common" },
+  { "id": "open-front", "start": [0, 0], "end": [4, 0], "virtual": true, "beyond": "common" }
+],
+"floors": [{ "id": "f4", "name": "Fourth floor", "level": 0, "above": "neighbour", "below": "neighbour" }],
+"buildings": [{ "id": "house", "name": "House", "floors": ["ground", "upper"] }],
+"context": [{ "id": "no-12", "name": "No. 12", "points": [[-10.5, 0], [-0.5, 0], [-0.5, 8], [-10.5, 8]], "height": 6 }]
+```
+
+| Field | What it states |
+|---|---|
+| a wall's `kind: "separating"` | A party wall, or a wall between a home and the building's common parts |
+| a wall's `beyond` | What lies past its side with no room drawn on it: `outside`, `common` (a common part of the building that is not drawn: a landing, a stair, a hall's aisle) or `neighbour` (another home or property) |
+| a floor's `above` | What lies above it: `outside`, `common` or `neighbour` |
+| a floor's `below` | What lies below it: `ground`, `outside`, `common` or `neighbour` |
+| `buildings[].id`, `name`, `floors` | A building of the plan and the floors that are its own, by id, at least one; a floor in one building at most |
+| `context[].id`, `name`, `floor`, `points`, `height` | A shape drawn round the plan for context: its outline, either way round, on a floor (unstated, the ground floor), with a name and a height |
+
+**Separating walls and what lies beyond.** `beyond` holds along every stretch of the wall that has
+a room on one side only, so a wall can be a party wall for part of its length ([inside and outside
+walls](#inside-and-outside-walls)). A separating wall that states nothing beyond it is read as one
+to a common part, the one way a door through it is right. Such a stretch is neither inside nor
+outside: it is `separating` in `wallSides`, drawn as the home's outer walls are, not external in
+the IFC, never a way out and never an escape window, and the gross external area is measured to
+its middle ([areas.md](areas.md)). A wall that states `beyond: "outside"` faces outside, whatever
+its kind.
+
+**Doors between homes.** A door, a doorless opening or an open side between rooms of two different
+[flats](#flats-and-flat-types), or a door through a wall with a neighbour beyond it, is never a
+route: a home is not left through another, and `opening/between-homes` says so. A door onto a
+common part that is not drawn is a way on: the flat gets no "leads to a space that is not drawn"
+note, and its floor's way out is said not checked, through the common parts
+(`floor/not-checked-way-out-common-parts`). Every flat needs a front door, onto a room in no flat,
+a common part, a space not drawn or the outside (`flat/no-front-door`).
+
+**Open edges.** A virtual wall with a room on one side only is an open edge, never a door. Its
+`beyond` says where it leads; unstated, it leads where the drawing says, to the outside (a way out,
+as a terrace's edge is) or into floor no room claims (a way on, with no note).
+
+**Above and below.** A floor with more of the building above it (`common` or `neighbour`) has no
+roof in any take-off, the 3D view or the IFC; one with more of it below has no ground slab, and is
+not a ground floor, so a door from it to the outside is never a way out.
+
+**Buildings.** Each building stacks its own floors from 0, so a garden studio's floor does not
+stand on the house's. `grid_areas` gives each building's net, gross internal and gross external
+area, the sums of its own floors', and its height. A floor no building names is stacked with the
+others no building names. The list's own faults are named, worth a look, and the building is read
+without them:
+
+| Code | What it says |
+|---|---|
+| `plan/building-unknown-floor` | A building names a floor the plan does not have, with the floor most likely meant; it is left out |
+| `plan/building-floor-in-two` | A floor is named by two buildings; it is in the one listed first only |
+| `plan/building-duplicate-id` | Two buildings have one id; the first is read |
+
+**Context.** A context shape is drawn, dashed, on its floor's plan, and framed with it. It is never
+a wall, a room or a part of any building: it is in no area, check, count or export of the building,
+so neighbours drawn for context add 0 m² (lab EL-17).
+
+All of these are optional and never defaulted, so a plan written before them reads exactly as
+before (version 1).
+
 ## Rooms with holes
 
 A ring gallery round a courtyard, or a car park round a core, is one room with a hole in it. Its
@@ -992,8 +1063,10 @@ type changes every part of it: "make every partition 120 mm" is one change, to t
   none. The IFC writes it as the type's one layer, and `Not stated` where no material is given,
   for a wall of no type too (lab AU3-4); [what the IFC holds](commands.md#what-the-ifc-holds-hnd-2).
   Layered build-ups are not held.
-- **The kind** a wall type states is one of the wall kinds the plan holds (`WallKindSchema`), so a
-  kind added to walls is a kind a type may state.
+- **The kind** a wall type states is one of the wall kinds (`WallKindSchema`): `exterior`,
+  `interior`, `partition` or CNT-6's `separating` (a party wall, or one to the common parts), so
+  a party wall type gives its walls the kind the route and estimate checks read, and the walls
+  are priced by their type, apart from partitions of the same thickness (lab AC-5).
 - **A file in other units** has its types' lengths read in that unit too ([units](#units)).
 
 A room or a zone may name its `finishes`, each by the person's own name: `floor`, `walls` (the
@@ -1159,6 +1232,9 @@ states no kind reads as. Where they disagree, one warning says so:
 | Code | What it says |
 |---|---|
 | `wall/kind-differs` | A wall stated exterior with rooms on both sides, kept as an outside wall; or a wall stated a partition that faces outside, treated as an outside wall. With how long, and the rooms |
+
+A wall stated `separating`, or one that states a common part or a neighbour `beyond` it, is
+neither: it is a separating wall ([part of a larger building](#part-of-a-larger-building)).
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.

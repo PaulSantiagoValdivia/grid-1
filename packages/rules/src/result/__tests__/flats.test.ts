@@ -6,11 +6,20 @@ import { describe, expect, it } from 'vitest'
 import { duplexHouse, edit } from '@ongrid/floorplan/test-support/plans'
 import { inspectPlan } from '../..'
 
-const flatLines = (plan: unknown) => inspectPlan(plan).lines.filter((line) => line.code.startsWith('flat/'))
+// CNT-6: the list's own faults; `flat/no-front-door` is the route check's, about the flat's doors.
+const flatLines = (plan: unknown) => inspectPlan(plan).lines.filter((line) => line.code.startsWith('flat/') && line.code !== 'flat/no-front-door')
 
 describe('CNT-4 the flats list in the result record', () => {
   it('gives a sound duplex no line', () => {
     expect(flatLines(duplexHouse())).toEqual([])
+  })
+
+  it('CNT-6: says the studio, entered only through the duplex\'s hall, has no front door of its own', () => {
+    const lines = inspectPlan(duplexHouse()).lines
+    expect(lines.filter((l) => l.code === 'flat/no-front-door').map((l) => [l.thing, l.message])).toEqual([
+      [{ kind: 'flat', id: 'S1' }, 'The flat "Studio 1" has no front door: none of its doors opens onto a common part or the outside']
+    ])
+    expect(lines.filter((l) => l.code === 'opening/between-homes').map((l) => l.thing)).toEqual([{ kind: 'opening', id: 'd_hb' }])
   })
 
   it('words each fault about the flat by its name, worth a look, on the floor of its first room', () => {

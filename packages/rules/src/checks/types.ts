@@ -170,6 +170,8 @@ export type SkipReason =
   | 'cannot_be_drawn'
   | 'no_stairs'
   | 'way_out_not_drawn'
+  /** CNT-6: the floor's way out goes on through common parts the plan does not draw. */
+  | 'way_out_through_common_parts'
   | 'no_use'
   | 'no_figures_for_place'
   | 'above_escape_storeys'

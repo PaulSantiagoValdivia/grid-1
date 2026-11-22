@@ -20,6 +20,7 @@ import { outlineKnown, slabOutline } from './outline'
 import type { FloorPlan } from './plan'
 import { indexPlan } from './plan'
 import { footprintFloors } from './site'
+import { planBuildings } from './buildings'
 import { validatePlan } from './validate'
 
 /** One storey: a level with floors that hold something. */
@@ -87,7 +88,7 @@ export function planStoreys(plan: FloorPlan, options: StoreyOptions = {}): PlanS
  * How high the building stands over the ground: to the top of the highest roof of a floor at or
  * above the ground floor that holds something. Null when no such floor holds anything.
  */
-export function buildingHeight(plan: FloorPlan, storeys: PlanStoreys = planStoreys(plan)): BuildingHeight | null {
+export function buildingHeight(plan: FloorPlan, storeys: PlanStoreys = planStoreys(plan), only?: ReadonlySet<string>): BuildingHeight | null {
   const elevations = floorElevations(plan)
   const ground = groundLevel(plan, elevations)
   const floors = new Map(planFloors(plan).map((floor) => [floor.id, floor] as const))
@@ -95,6 +96,7 @@ export function buildingHeight(plan: FloorPlan, storeys: PlanStoreys = planStore
   for (const storey of storeys.storeys) {
     if (storey.below) continue
     for (const id of storey.floors) {
+      if (only !== undefined && !only.has(id)) continue
       const at = elevations.floors.get(id)
       const floor = floors.get(id)
       if (at === undefined || floor === undefined) continue
@@ -105,4 +107,12 @@ export function buildingHeight(plan: FloorPlan, storeys: PlanStoreys = planStore
   }
   if (best === null) return null
   return { height: best.top - ground.level, floor: best.floor, ground: ground.level, groundStated: ground.stated }
+}
+
+/**
+ * CNT-6 (C23): how high each building the plan names stands over the ground, from its own floors
+ * (`buildingHeight`), by id, in plan order. Null for a building none of whose floors holds anything.
+ */
+export function buildingHeights(plan: FloorPlan, storeys: PlanStoreys = planStoreys(plan)): { readonly id: string; readonly name: string; readonly height: BuildingHeight | null }[] {
+  return planBuildings(plan).map((building) => ({ id: building.id, name: building.name, height: buildingHeight(plan, storeys, new Set(building.floors)) }))
 }

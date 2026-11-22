@@ -1015,7 +1015,9 @@ function writeWallQuantities(c: Context, element: WallElement, openings: readonl
 const WALL_KIND_WORDS: Readonly<Record<WallKind, string>> = {
   exterior: 'Exterior wall',
   interior: 'Interior wall',
-  partition: 'Partition'
+  partition: 'Partition',
+  // CNT-6 (C23): a party wall, or a wall to the common parts.
+  separating: 'Separating wall'
 }
 
 /** The plan holds no type, material or construction for these walls: the type says so. */
