@@ -126,6 +126,10 @@ picture file or the PNG.
   reversible path. NOTICE says where its components are listed.
 - **NOTICE names the canvas's copyright holder as "its author"**: its LICENSE gives only an email
   address, which I did not copy into the repository.
+- **SHT-7, on `main` since, writes on the drawing** (a title and key band, notes, a sketch). The
+  eight buildings carry none of it, so the new test does not say whether the app's view draws
+  that writing as the file does. Once merged, a building with writing added to
+  `sameDrawing.dom.test.tsx` would settle it.
 - **The 450 kB bundle cap fails on `main` already.** `packages/cli/dist/grid.mjs` builds to
   459,241 bytes on this branch, and nothing this branch changes is in it (`Canvas2D` is not
   bundled, and the change is a type). So `grid.e2e.test.ts` "starts with a shebang and is one
@@ -158,3 +162,5 @@ picture file or the PNG.
   without conflict, the two new test files passed there (27 of 27), and `tsc` passed for
   `packages/viewer` and `packages/cli`. QAR-7 speeds the door-swing check on large plans, so the
   timings of the lab's size tests above may be lower on `main`; I did not measure them there.
+  That merge first conflicted in `docs/commands.md` only, beside SHT-7's new section; the picture
+  section now sits after the 3D one and the branch merges with `main` without conflict.
