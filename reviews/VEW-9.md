@@ -62,7 +62,11 @@ walk's order. `walked.test.ts` also walks round an L's inside corner and round a
 
 ## Expectations changed
 
-None of an existing test. Added to existing test files:
+- `packages/cli/src/command/__tests__/describe.e2e.test.ts`: the refusal of an unknown `--length`
+  now lists `walk` ("line, rooms, walls, walk"), and the usage line has `walk`, `--floor <id>` and
+  `--pictures <folder>`. Both are the new length and options, nothing else.
+
+Added to existing test files:
 
 - `packages/cli/src/command/__tests__/everyPath.e2e.test.ts`: `describe --pictures` is a new slot
   that takes a path, so it is listed (CMD-15 fails a path option that is not); the six T-5 paths
