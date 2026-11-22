@@ -7,8 +7,21 @@
  * answers with each line met or missed (`brief/lines.ts`).
  */
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
-import { BriefRefused, FIGURE_NAMES, FIGURES_HEADING, LEVELS, parseBrief, QUOTE_MAX, readBrief, SOURCES, writeBrief, type Brief } from '../brief/brief'
+import { BriefRefused, FIGURE_NAMES, FIGURES, FIGURES_HEADING, RATIO_MEASURES, type FigureName, LEVELS, parseBrief, QUOTE_MAX, readBrief, SOURCES, writeBrief, type Brief } from '../brief/brief'
 import { briefLines, briefText, MAT } from '../brief/lines'
+
+/** What each figure's value is, in the tool's schema. */
+const VALUE_SAYS: Readonly<Record<FigureName, string>> = {
+  door_width: 'The smallest size, metres.',
+  corridor_width: 'The smallest size, metres.',
+  turning_circle: 'The smallest size, metres.',
+  step: 'The highest step at a door, metres: 0 for none.',
+  ceiling_height: 'The smallest size, metres.',
+  plot_coverage: 'The most of the plot the building may cover, seen from above, as a percentage (40 for 40%).',
+  floor_area_ratio: 'The most gross floor area, every floor at or above the ground floor, over the plot area (1.2).',
+  building_height: 'The highest the building may stand, metres from the ground to the top of its roof.',
+  parking_per_home: 'The fewest parking spaces per home, the spaces the floors state over the homes they state: 0 for none.',
+}
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { loadPlan } from '../command/plan'
 import { NAME_MAX } from '../command/planText'
@@ -77,8 +90,9 @@ const BRIEF_SCHEMA = {
       properties: Object.fromEntries(FIGURE_NAMES.map((figure) => [figure, {
         type: 'object',
         properties: {
-          value: { type: 'number', minimum: 0, maximum: 100, description: figure === 'step' ? 'The highest step at a door, metres: 0 for none.' : 'The smallest size, metres.' },
+          value: { type: 'number', minimum: FIGURES[figure].least, maximum: FIGURES[figure].top, description: VALUE_SAYS[figure] },
           ...(figure === 'turning_circle' ? { rooms: { type: 'array', items: NAME, maxItems: 500, description: 'The rooms it is for, by name. Every room when left out.' } } : {}),
+          ...(figure === 'floor_area_ratio' ? { measure: { type: 'string', enum: RATIO_MEASURES, description: 'The gross measure the ratio is set by. Left out, the usual one for the plan\'s place, else gross external, said as assumed.' } } : {}),
           level: { type: 'string', enum: ['must', 'should'] },
           source: SAID.source,
           quote: SAID.quote,
@@ -149,7 +163,7 @@ export const writeBriefTool: GridTool = {
   hint: 'write-file',
   description:
     'Use this when the person says what they want, before you draw the first room: in one call, write the brief from their words, each wish with its level (must, should, avoid), its source (given, with the person\'s words in quote, or assumed, for them to confirm), and what is still open. '
-    + 'It holds room areas (m²) and counts, inside sizes and the footprint in metres, rooms that must touch or must not (avoid), and under figures the person\'s own figures, theirs and not from any code or standard: door_width, corridor_width, turning_circle, step and ceiling_height. A figure Grid does not know is refused with the ones it knows. '
+    + 'It holds room areas (m²) and counts, inside sizes and the footprint in metres, rooms that must touch or must not (avoid), and under figures the person\'s own figures, theirs and not from any code or standard: door_width, corridor_width, turning_circle, step and ceiling_height, and the site limits plot_coverage (%), floor_area_ratio (with the gross measure it is set by), building_height (m) and parking_per_home. A figure Grid does not know is refused with the ones it knows. '
     + `It writes only the brief beside the plan (plan.brief.json beside plan.json), replacing the one there, never the plan. It answers with each line met or missed against the plan as drawn, measured as grid_areas and grid_measure measure, and a size written in a room's name (12 m², 6 tatami, a mat taken as ${MAT.width} × ${MAT.length} m) is read against the room until the brief gives one. Leave brief out to read the brief and its lines and write nothing. `
     + 'Every change to the plan then answers with the same lines. Do not use to change the plan (grid_write_rooms and the edit tools), for a rule from a code (grid_check), or to say a plan is allowed: a line met says only that the drawing holds what was asked.',
   args: {

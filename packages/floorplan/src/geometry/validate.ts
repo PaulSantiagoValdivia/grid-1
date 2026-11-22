@@ -833,7 +833,22 @@ function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken:
 }
 
 function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
-  for (const piece of result.unclaimed) {
+  // BRF-4 (C17): a floor with an outline and no walls is massing: all of it is floor no room
+  // claims yet, and saying so would be the whole floor, every time. Its areas say it is massing.
+  const massing = !plan.walls.some((wall) => floorOf(wall) === result.floor && !broken.has(wall.id))
+  if (result.pastOutline !== null && result.pastOutline >= tolerance('areaReported')) {
+    issues.push(
+      issue(
+        'floor',
+        result.floor,
+        'floor/past-outline',
+        `Floor ${quoted(result.floor)}'s walls reach ${result.pastOutline.toFixed(2)} m² past the outline it states. ` +
+          'The slab, the roof and the gross area take in both, so the floor is larger than its outline.',
+        'warning'
+      )
+    )
+  }
+  for (const piece of massing ? [] : result.unclaimed) {
     if (refusedRoomFor(result.floor, piece, plan, broken)) continue
     const found = issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning')
     issues.push(followOn(found, unclaimedCause(piece, plan, broken, leftOut)))

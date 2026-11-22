@@ -461,6 +461,36 @@ The data holds `boundary` (`area`, `problem`, and each edge's `edge`, `from`, `t
 `plan/setback-short`. The geometry is `siteMeasures` in `@ongrid/floorplan`
 (`src/geometry/site.ts`).
 
+### How much fits: massing, storeys and the person's site limits
+
+Before any wall exists, a floor may state its outline (BRF-4,
+[plan-file.md](plan-file.md#a-floor-outline-before-the-walls)), and the answer measures it as it
+would the walls: after the plot's lines come the storeys and each floor's gross external area,
+massing marked as such, then "Site limits": the person's own `plot_coverage`, `floor_area_ratio`,
+`building_height` and `parking_per_home` from the brief beside the plan
+([brief.md](brief.md#the-persons-own-figures)), and the plan's set-backs edge by edge. Each says
+what is used, the limit and met or not met, and how it was measured, naming the area rule: Grid
+brings no limit, proposes no layout and optimises nothing. FD-1's massing, two floors of the
+outline (3, 5), (15.762, 5), (18.482, 22), (3, 22) on the lab's 500 m² plot:
+
+```text
+Storeys: 2 storeys at or above the ground floor, none below it; counted by level, from the floors that hold an outline or walls that close one.
+  "Ground floor": gross external 240.07 m², massing: its outline, no walls yet.
+  "First floor": gross external 240.07 m², massing: its outline, no walls yet.
+Site limits, the person's own figures: theirs, not from any code or standard.
+  Plot coverage: used 48.0%, your limit at most 40%: not met. Measured as the building seen from above, every floor at or above the ground floor, inside the plot's boundary, over the plot's area: 240.07 m² over 500.00 m².
+  Floor area ratio: used 0.96, your limit at most 1: met. Measured as Gross external area (…), of every floor at or above the ground floor, over the plot's area: 480.15 m² over 500.00 m².
+  Building height: used 6.50 m, your limit at most 9.00 m: met. …
+  Parking per home: used 0.75 spaces per home, your limit at least 1 space per home: not met. …
+```
+
+The data adds `storeys` (`above`, `below`, `storeys`, `empty`), `limits` (each `limit`, `edge`
+for a set-back, `state` `met`, `missed` or `not-measured`, `used`, `allowed`, `most`, `unit`,
+`rule`, `why`, `assumed`, `source`) and `brief`. The same limits are lines of the brief in every
+change's answer. `grid_areas` gives the storeys too (`storeys`, and a line when a floor is
+massing). The geometry is `planStoreys` and `buildingHeight` in `@ongrid/floorplan`
+(`src/geometry/storeys.ts`); the limits are `siteLimits` (`packages/cli/src/quantities/limits.ts`).
+
 ## A note set aside as seen
 
 `grid_check` answers short by default (MSG-10): the notes, the figures they used, what each
