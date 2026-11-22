@@ -1956,6 +1956,11 @@ export const es: Messages = {
   'sheet.sill': 'antepecho {sill}',
   'sheet.inAll': 'En total',
   'sheet.openingCounts': '{doors} puertas, {windows} ventanas, {openings} huecos sin puerta, cada uno una vez',
+  // ── ARE-15: the door and window types, each with its openings' marks ──────────────────────────
+  'sheet.openingTypes': 'Tipos de puertas y ventanas',
+  'sheet.openingTypes.heading': 'Tipos de puertas y ventanas, por clase y tamaño / unidades',
+  'sheet.openingType.marks': 'marcas {marks}',
+  'sheet.openingTypes.count': '{types} tipos: {doors} puertas, {windows} ventanas',
   // ── After merging main at 90a933b1: HND-11's survey origin in a GLB file ────────────────────
   'drawing.glb.origin': 'Los puntos se cuentan desde el punto ({x}; {y}) del plano; el nodo {node} lleva el modelo hasta allí. La x del plano es la x de glTF, y la y del plano es la -z de glTF.',
   'drawing.approximated.one': 'Grid escribió la curva de {n} parte del plano como tramos rectos en este archivo, a {off} m de la curva como mucho: este archivo no escribe ningún arco ahí. grid check mide la curva real.',

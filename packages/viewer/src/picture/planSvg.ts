@@ -100,7 +100,8 @@ export interface PictureOptions {
   /**
    * LVL-9: the marks for the plan's other drawings: `section`, a section's cut line with the way it
    * looks; `elevations`, a mark outside each main side looking at the building; `levels`, each
-   * room's floor level. None by default.
+   * room's floor level; ARE-15's `schedule`, each room's and opening's mark in the schedules, by
+   * id. None by default.
    */
   readonly marks?: DrawingMarksAsked
 }
@@ -270,7 +271,7 @@ function framePicture(plan: FloorPlan, options: PictureOptions) {
 }
 
 function marksOf(plan: FloorPlan, floor: string, drawing: PlanDrawing, around: Bounds, asked: DrawingMarksAsked | undefined): DrawingMarks | null {
-  if (asked === undefined || (asked.section == null && asked.elevations !== true && asked.levels !== true)) return null
+  if (asked === undefined || (asked.section == null && asked.elevations !== true && asked.levels !== true && asked.schedule == null)) return null
   return drawingMarks(plan, floor, drawing, around, asked)
 }
 

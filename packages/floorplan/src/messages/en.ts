@@ -1967,6 +1967,11 @@ export const en = {
   'sheet.sill': 'sill {sill}',
   'sheet.inAll': 'In all',
   'sheet.openingCounts': '{doors} doors, {windows} windows, {openings} doorless openings, each once',
+  // ── ARE-15: the door and window types, each with its openings' marks ──────────────────────────
+  'sheet.openingTypes': 'Door and window types',
+  'sheet.openingTypes.heading': 'Door and window types, by kind and size / count',
+  'sheet.openingType.marks': 'marks {marks}',
+  'sheet.openingTypes.count': '{types} types: {doors} doors, {windows} windows',
   // ── After merging main at fbe5160e: CNT-10's phases, VEW-9's walk-through, WRT-7's sheet units ──
   'issue.opening/phase-wall': 'Opening {part} is {phase}, so it stands {states}, but its wall {wall} is {wallPhase} and stands {wallStates}',
   'issue.room/phase-wall': 'Room {part} is {phase}, so it stands {states}, but its wall {wall} is {wallPhase} and stands {wallStates}',

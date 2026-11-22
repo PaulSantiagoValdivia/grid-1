@@ -11,6 +11,10 @@
  *   that draws that side (LVL-8, `planFacade`): the side of the drawing it is seen from.
  * - **A level mark** is each drawn room's floor level: its storey's (LVL-1) and its own offset
  *   (LVL-7), with whether the plan states the storey's elevation.
+ * - **A schedule mark** (ARE-15) is each drawn room's and opening's mark in the schedules, as the
+ *   caller gives them by id (the room's number, `D1`, `W1`): a room's at its label point, an
+ *   opening's on the face of its wall away from a door's swing, or on a window's room side, so it
+ *   is beside the part and clear of its symbol. A part the caller gives no mark has none.
  *
  * Pure: where each mark is, in plan metres. How a mark looks is the viewer's.
  */
@@ -28,6 +32,7 @@ import { add, dot, scale } from './vec2'
 import type { SectionLine } from './section'
 import type { FacadeSide } from './facade'
 import { sectionFrame } from './section'
+import { pointInPolygon } from './innerPoint'
 
 export interface SectionMark {
   /** The cut line as given. */
@@ -65,16 +70,38 @@ export interface LevelMark {
   readonly stated: boolean
 }
 
+/** ARE-15: a room's or an opening's mark, tied to its row in the schedules by the part's id. */
+export interface ScheduleMark {
+  readonly of: 'room' | 'opening'
+  readonly id: string
+  /** The mark as the schedule gives it: a room's number, an opening's `D1`, `W1` or `O1`. */
+  readonly mark: string
+  /** A room's label point, which the mark is drawn over; an opening's middle on the face of its wall the mark stands by. */
+  readonly at: Vec2
+  /** For an opening, the way out from that face, a unit direction on the plan; null for a room. */
+  readonly out: Vec2 | null
+}
+
+/** ARE-15: the marks to draw, by part id, as the schedules number the parts. */
+export interface ScheduleMarkLabels {
+  readonly rooms: ReadonlyMap<string, string>
+  readonly openings: ReadonlyMap<string, string>
+}
+
 export interface DrawingMarks {
   readonly section: SectionMark | null
   readonly elevations: readonly ElevationMark[]
   readonly levels: readonly LevelMark[]
+  /** ARE-15: one per drawn room and opening the schedules give a mark. */
+  readonly schedule: readonly ScheduleMark[]
 }
 
 export interface DrawingMarksAsked {
   readonly section?: SectionLine | null
   readonly elevations?: boolean
   readonly levels?: boolean
+  /** ARE-15: the schedules' marks, by part id. */
+  readonly schedule?: ScheduleMarkLabels | null
 }
 
 /**
@@ -113,7 +140,41 @@ export function drawingMarks(plan: FloorPlan, floor: string, drawing: PlanDrawin
     }
   }
 
-  return { section, elevations, levels }
+  return { section, elevations, levels, schedule: asked.schedule == null ? [] : scheduleMarks(drawing, asked.schedule) }
+}
+
+/** ARE-15: each drawn room's and opening's mark, in the drawing's order. */
+function scheduleMarks(drawing: PlanDrawing, labels: ScheduleMarkLabels): ScheduleMark[] {
+  const out: ScheduleMark[] = []
+  for (const room of drawing.rooms) {
+    const mark = labels.rooms.get(room.id)
+    if (mark !== undefined) out.push({ of: 'room', id: room.id, mark, at: room.labelAt, out: null })
+  }
+  const seen = new Set<string>()
+  for (const opening of drawing.openings) {
+    const mark = labels.openings.get(opening.id)
+    if (mark === undefined || seen.has(opening.id)) continue
+    seen.add(opening.id)
+    const middle = scale(add(opening.from, opening.to), 0.5)
+    const side = markSide(drawing, opening, middle)
+    out.push({ of: 'opening', id: opening.id, mark, at: add(middle, scale(side, opening.thickness / 2)), out: side })
+  }
+  return out
+}
+
+/**
+ * The face of an opening's wall its mark stands by: a door's, away from the face it swings to
+ * (C2: `left` is the face the normal points at), so the mark is clear of its leaf; a window's or
+ * a doorless opening's, the face a room is on, tried one wall's thickness from the middle.
+ */
+function markSide(drawing: PlanDrawing, opening: PlanDrawing['openings'][number], middle: Vec2): Vec2 {
+  const n = opening.normal
+  if (opening.type === 'door' && opening.swing !== undefined) return opening.swing === 'left' ? scale(n, -1) : n
+  const inRoom = (side: Vec2): boolean => {
+    const p = add(middle, scale(side, opening.thickness))
+    return drawing.rooms.some((room) => pointInPolygon(p, room.polygon, room.holes))
+  }
+  return inRoom(n) || !inRoom(scale(n, -1)) ? n : scale(n, -1)
 }
 
 /** The side of the drawing a direction on the plan points to most: +y is north, the drawing's top. */

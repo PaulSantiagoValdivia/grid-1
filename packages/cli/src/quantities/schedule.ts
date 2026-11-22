@@ -4,15 +4,16 @@
  * frame, leaf or clear width.
  */
 import { compareIds, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
-import { factText, type Facts, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { factText, type Facts, type FloorPlan, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { english, said, type Said } from '@ongrid/floorplan/messages'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, FLAT_RULE, planAreas } from './areas'
 import { flatOfRoom, planFlatTypes, planFlats } from '@ongrid/floorplan/geometry'
 import { HEIGHT_RULE, roomHeight } from './measure'
 import { joinStates, type AreaState, type NumberState } from './state'
-import { sideNames, type Survey } from './survey'
+import { sideNames, surveyPlan, type Survey } from './survey'
 import { csv, sqFt } from './units'
+import type { DrawingMarksAsked, ScheduleMarkLabels } from '@ongrid/floorplan/geometry/drawingMarks'
 
 export const SCHEDULE_RULE =
   'Sizes are the opening in the wall, width by height, in metres, with the sill above the floor. The plan holds no frames or leaves, so a clear width is not known.'
@@ -88,6 +89,11 @@ export interface RoomScheduleRow {
   readonly number: number
   /** CNT-9: the number the plan states for the room, which the schedule gives in place of Grid's; null when it states none. */
   readonly roomNumber: string | null
+  /**
+   * ARE-15: the room's mark on the drawing: its number in the schedule of every floor (the stated
+   * one, else Grid's), the same whichever floors are asked for.
+   */
+  readonly mark: string
   readonly id: string
   readonly name: string
   readonly use: string | null
@@ -141,6 +147,13 @@ export interface RoomSchedule {
 /** One opening, listed once, with the rooms on its two sides. */
 export interface OpeningScheduleRow {
   readonly number: number
+  /**
+   * ARE-15: its mark on the drawing, `D1`, `W1`, `O1`: its type's letter and its place among the
+   * openings of its type in the schedule of every floor, the same whichever floors are asked for.
+   */
+  readonly mark: string
+  /** ARE-15: the door or window type it is (`openingTypeKey`); null for a doorless opening. */
+  readonly typeKey: string | null
   readonly id: string
   readonly type: 'door' | 'window' | 'opening'
   readonly floor: string
@@ -203,6 +216,8 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
   const order = floorOrder(survey, options.floors)
   const areas = planAreas(survey, { floors: order.map((f) => f.id) })
   const numbered = roomNumbers(survey.plan, order.map((f) => f.id))
+  // ARE-15: the marks are the numbers of the schedule of every floor, so a floor asked alone keeps them.
+  const marks = new Map(roomNumbers(survey.plan).map((r) => [r.id, r.stated ?? String(r.number)] as const))
   // CNT-4: on a plan that lists flats, each row says which flat its room is in.
   const listsFlats = (survey.plan.flats ?? []).length > 0
   const flatOf = flatOfRoom(planFlats(survey.plan))
@@ -226,6 +241,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
       rows.push({
         number,
         roomNumber: stated,
+        mark: marks.get(room.id) ?? stated ?? String(number),
         id: room.id,
         name: room.name,
         use: room.use,
@@ -251,19 +267,26 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
 
 const TYPE_ORDER = { door: 0, opening: 1, window: 2 } as const
 
+/** ARE-15: the letter an opening's mark starts with, by its type. Marks are codes, the same in every language. */
+export const MARK_LETTERS = { door: 'D', window: 'W', opening: 'O' } as const
+
 export function openingSchedule(survey: Survey, options: { floors?: readonly string[] } = {}): OpeningSchedule {
-  const rows: OpeningScheduleRow[] = []
-  const counts = { door: 0, window: 0, opening: 0 }
-  for (const floor of floorOrder(survey, options.floors)) {
+  // ARE-15: every floor is listed first, so each opening's mark is the same whichever floors are asked for.
+  const all: Omit<OpeningScheduleRow, 'number'>[] = []
+  const seenOf = { door: 0, window: 0, opening: 0 }
+  for (const floor of floorOrder(survey, undefined)) {
     const facts = survey.facts.floors.find((f) => f.id === floor.id)!
     const named = new Map(facts.rooms.map((room) => [room.id, room.name] as const))
     const side = (s: OpeningFacts['sides'][number]): string => (typeof s === 'object' ? named.get(s.room) ?? s.room : s)
     const stated = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
     for (const opening of [...facts.openings].sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || compareIds(a.id, b.id))) {
-      counts[opening.type] += 1
+      seenOf[opening.type] += 1
       const own = stated.get(opening.id)
-      rows.push({
-        number: rows.length + 1,
+      const kind = statedKind(opening.type, own?.kind)
+      const opens = own?.opens === undefined || opening.type === 'opening' ? null : { width: partWidth(opening.width, own.opens), height: partHeight(opening.height, own.opens) }
+      all.push({
+        mark: `${MARK_LETTERS[opening.type]}${seenOf[opening.type]}`,
+        typeKey: opening.type === 'opening' ? null : openingTypeKey(opening.type, kind, opening.width, opening.height, opens),
         id: opening.id,
         type: opening.type,
         floor: floor.id,
@@ -271,15 +294,151 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
         width: opening.width,
         height: opening.height,
         sill: opening.sill,
-        kind: statedKind(opening.type, own?.kind),
-        opens: own?.opens === undefined || opening.type === 'opening' ? null : { width: partWidth(opening.width, own.opens), height: partHeight(opening.height, own.opens) },
+        kind,
+        opens,
         ...handingOf(own === undefined ? null : handingSaid(own, opening.sides, side)),
         between: [side(opening.sides[0]), side(opening.sides[1])],
         properties: stated.get(opening.id)?.properties ?? {},
       })
     }
   }
+  const counts = { door: 0, window: 0, opening: 0 }
+  const rows: OpeningScheduleRow[] = []
+  for (const row of all) {
+    if (options.floors !== undefined && !options.floors.includes(row.floor)) continue
+    counts[row.type] += 1
+    rows.push({ number: rows.length + 1, ...row })
+  }
   return { rows, counts, rule: SCHEDULE_RULE }
+}
+
+// ---------------------------------------------------------------------------------------------
+// ARE-15: the door schedule and the window schedule by type, and the marks that tie the drawing
+// to the schedules' rows.
+//
+// A type is, for now, the kind the plan states and the size of the opening, with the part that
+// opens when the plan states one (`basis: 'kind-and-size'`). CNT-15's named door and window types
+// are not built yet: when they are, a type the plan names is a row of its own with `basis: 'named'`,
+// keyed by its id, and the openings that name none stay grouped as here.
+
+/** A size in a type's key, to the millimetre: `0.9`, `2.1`. */
+const keySize = (value: number): string => String(Math.round(value * 1000) / 1000)
+
+/**
+ * ARE-15: a door or window type's key: its type, the kind the plan states and its size, as the
+ * estimate and the IFC key them (`door:0.9x2.1`, `door:sliding:2.2x2.1`), and the part that
+ * opens when the plan states one (`door:double:1.5x2.1:opens:0.9x2.1`).
+ */
+export function openingTypeKey(type: 'door' | 'window', kind: OpeningKind | null, width: number, height: number, opens: { readonly width: number; readonly height: number } | null): string {
+  return `${type}:${kind === null ? '' : `${kind}:`}${keySize(width)}x${keySize(height)}${opens === null ? '' : `:opens:${keySize(opens.width)}x${keySize(opens.height)}`}`
+}
+
+/** One opening of a type, by its mark. */
+export interface OpeningTypeItem {
+  readonly mark: string
+  readonly id: string
+  readonly floor: string
+  readonly floorName: string
+  readonly sill: number
+  readonly handing: string | null
+  readonly between: readonly [string, string]
+}
+
+/** One door or window type, with the marks of every opening of it. */
+export interface OpeningTypeRow {
+  /** 1, 2, 3… in the schedule's order. */
+  readonly number: number
+  /** What makes the type. Only `kind-and-size` now; CNT-15's named types will be `named`. */
+  readonly basis: 'kind-and-size'
+  readonly key: string
+  readonly type: 'door' | 'window'
+  readonly kind: OpeningKind | null
+  readonly width: number
+  readonly height: number
+  readonly opens: { readonly width: number; readonly height: number } | null
+  /** The sills of its openings, each once, lowest first. */
+  readonly sills: readonly number[]
+  readonly count: number
+  /** Its openings' marks, in the schedule's order. */
+  readonly marks: readonly string[]
+  readonly items: readonly OpeningTypeItem[]
+}
+
+export interface OpeningTypeSchedule {
+  readonly of: 'door' | 'window'
+  readonly rows: readonly OpeningTypeRow[]
+  /** The openings of that type, each counted once. */
+  readonly count: number
+  readonly rule: string
+}
+
+export const OPENING_TYPE_RULE =
+  "Doors and windows are grouped into types by the kind the plan states and the size of the opening in the wall, width by height, and by the part that opens when the plan states one; the plan names no types of its own yet. Each type lists the marks of its openings, as the drawing shows them (grid_view marks schedule) and the opening schedule numbers them (of=openings)."
+
+/** ARE-15: the doors, or the windows, grouped by type, each type with its openings' marks. */
+export function openingTypeSchedule(survey: Survey, of: 'door' | 'window', options: { floors?: readonly string[] } = {}): OpeningTypeSchedule {
+  const groups = new Map<string, { rows: OpeningScheduleRow[] }>()
+  const listed = openingSchedule(survey, options).rows.filter((row) => row.type === of)
+  for (const row of listed) {
+    const key = row.typeKey!
+    const group = groups.get(key) ?? { rows: [] }
+    group.rows.push(row)
+    groups.set(key, group)
+  }
+  const rows = [...groups.entries()]
+    .map(([key, { rows: of_ }]) => {
+      const first = of_[0]!
+      return {
+        basis: 'kind-and-size' as const,
+        key,
+        type: of,
+        kind: first.kind,
+        width: first.width,
+        height: first.height,
+        opens: first.opens,
+        sills: [...new Set(of_.map((r) => r.sill))].sort((a, b) => a - b),
+        count: of_.length,
+        marks: of_.map((r) => r.mark),
+        items: of_.map((r) => ({ mark: r.mark, id: r.id, floor: r.floor, floorName: r.floorName, sill: r.sill, handing: r.handing, between: r.between })),
+      }
+    })
+    .sort((a, b) => kindOrder(a.kind, b.kind) || a.width - b.width || a.height - b.height || (a.opens?.width ?? a.width) - (b.opens?.width ?? b.width) || (a.opens?.height ?? a.height) - (b.opens?.height ?? b.height))
+    .map((row, i): OpeningTypeRow => ({ number: i + 1, ...row }))
+  return { of, rows, count: listed.length, rule: OPENING_TYPE_RULE }
+}
+
+/** ARE-15: the door or window schedule by type as CSV: one row per type, with its marks. */
+export function openingTypeScheduleCsv(schedule: OpeningTypeSchedule): string {
+  const name = `${schedule.of} schedule`
+  const windows = schedule.of === 'window'
+  const rows: Cell[][] = schedule.rows.map((r, i) => {
+    const n = i + 1
+    return [
+      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'type', r.key), r.kind,
+      numberCell(name, n, 'width', r.width, false), numberCell(name, n, 'height', r.height, false),
+      r.opens?.width ?? null, r.opens?.height ?? null,
+      ...(windows ? [r.sills.length === 1 ? r.sills[0]! : r.sills.join('; ')] : []),
+      numberCell(name, n, 'count', r.count, false), r.marks.join('; '),
+    ]
+  })
+  return csv(['number', 'type', 'kind', 'width m', 'height m', 'opens width m', 'opens height m', ...(windows ? ['sill m'] : []), 'count', 'marks'], rows)
+}
+
+/** ARE-15: the marks asked for, with the schedules' marks of the plan's rooms and openings. */
+export function withScheduleMarks(marks: DrawingMarksAsked, plan: FloorPlan): DrawingMarksAsked {
+  return { ...marks, schedule: scheduleMarkLabels(surveyPlan(plan)) }
+}
+
+/**
+ * ARE-15: the marks the drawing carries (`grid_view marks schedule`), by part id: each room's from
+ * the room schedule and each opening's from the opening schedule, of every floor. The drawing
+ * draws one for each part it draws that has one, so a mark and its row are one to one.
+ */
+export function scheduleMarkLabels(survey: Survey): ScheduleMarkLabels {
+  return {
+    rooms: new Map(roomSchedule(survey).rows.map((row) => [row.id, row.mark] as const)),
+    openings: new Map(openingSchedule(survey).rows.map((row) => [row.id, row.mark] as const)),
+  }
 }
 
 type Cell = string | number | null
@@ -346,7 +505,7 @@ export function openingScheduleCsv(schedule: OpeningSchedule): string {
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     return [
-      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'id', r.id), textCell(name, n, 'type', r.type),
+      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'mark', r.mark), textCell(name, n, 'id', r.id), textCell(name, n, 'type', r.type),
       ...(kinds ? [r.kind] : []),
       numberCell(name, n, 'width', r.width, false), numberCell(name, n, 'height', r.height, false), numberCell(name, n, 'sill', r.sill, false),
       ...(parts ? [r.opens?.width ?? null, r.opens?.height ?? null] : []),
@@ -356,7 +515,7 @@ export function openingScheduleCsv(schedule: OpeningSchedule): string {
     ]
   })
   return csv(
-    ['number', 'id', 'type', ...(kinds ? ['kind'] : []), 'width m', 'height m', 'sill m', ...(parts ? ['opens width m', 'opens height m'] : []), ...(handings ? ['handing'] : []), 'floor', 'side 1', 'side 2', 'count', ...columns],
+    ['number', 'mark', 'id', 'type', ...(kinds ? ['kind'] : []), 'width m', 'height m', 'sill m', ...(parts ? ['opens width m', 'opens height m'] : []), ...(handings ? ['handing'] : []), 'floor', 'side 1', 'side 2', 'count', ...columns],
     rows,
   )
 }
@@ -407,6 +566,8 @@ export interface FlatMixRow {
   readonly name: string
   readonly flats: number
   readonly mirrored: number
+  /** ARE-15: the bedrooms of each flat of the type, when they all have as many; null when they differ or none is placed. */
+  readonly bedrooms: number | null
   /** The share of all flats, 0 to 1. */
   readonly share: number
   readonly area: number
@@ -457,7 +618,8 @@ export function flatSchedule(survey: Survey, options: { floors?: readonly string
   const mix = kinds.map(({ type, name }): FlatMixRow => {
     const of = rows.filter((row) => row.type === type)
     const area = of.reduce((sum, row) => sum + row.area, 0)
-    return { type, name, flats: of.length, mirrored: of.filter((row) => row.mirrored).length, share: rows.length === 0 ? 0 : of.length / rows.length, area, each: of.length === 0 ? null : area / of.length }
+    const beds = [...new Set(of.map((row) => row.bedrooms))]
+    return { type, name, flats: of.length, mirrored: of.filter((row) => row.mirrored).length, bedrooms: beds.length === 1 ? beds[0]! : null, share: rows.length === 0 ? 0 : of.length / rows.length, area, each: of.length === 0 ? null : area / of.length }
   })
   const state = joinStates(areas.flats.map((flat) => flat.state))
   return {
@@ -481,6 +643,6 @@ export function flatScheduleCsv(schedule: FlatSchedule): string {
   })
   rows.push(['total', null, '', 'All flats', null, null, null, null, null, schedule.total.flats, null, schedule.total.area, sqFt(schedule.total.area), schedule.total.state.state])
   rows.push(['total', null, '', 'In no flat', null, null, null, null, null, null, null, schedule.notInFlats, sqFt(schedule.notInFlats), null])
-  for (const m of schedule.mix) rows.push(['mix', null, m.type ?? '', m.name, m.name, null, null, null, null, m.flats, m.mirrored, m.area, sqFt(m.area), null])
+  for (const m of schedule.mix) rows.push(['mix', null, m.type ?? '', m.name, m.name, null, null, null, m.bedrooms, m.flats, m.mirrored, m.area, sqFt(m.area), null])
   return csv(['row', 'number', 'id', 'name', 'type', 'mirrored', 'floors', 'rooms', 'bedrooms', 'flats', 'mirrored flats', 'area m2', 'area sq ft', 'state'], rows)
 }
