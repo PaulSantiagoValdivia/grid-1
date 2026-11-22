@@ -810,6 +810,8 @@ const checkTool: GridTool = {
       skippedCount: { type: 'number' },
       findings: { type: 'number' },
     }, ['ruleId', 'title', 'looksAt', 'lookedAt', 'lookedAtCount', 'skipped', 'skippedCount', 'findings'])),
+    // COD-4: what these checks never look at, whatever the plan (ceiling height, which walls carry load).
+    limits: listSchema(STRING),
   }),
   run(args, context) {
     const { loaded } = readPlan(context, args['plan'])
@@ -841,9 +843,11 @@ const checkTool: GridTool = {
       const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
       lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
     }
+    // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+    lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage },
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
     }
   },
 }

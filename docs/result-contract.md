@@ -288,6 +288,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: what is never looked at (COD-4)
+
+- `limits` adds two lines: "Ceiling height is not checked, in any room or under a sloping
+  roof" and "Which walls carry load is not known: the plan does not record it, so nothing here
+  looks at structure". There are eight lines now. A ceiling-height check, when there is one,
+  takes the first away.
+- `grid_check` returns `limits` and ends its text with "Never looked at, whatever the plan (N):"
+  and the lines.
+
 ### 2026-11-22: what each check looked at (MSG-2)
 
 - The record adds `coverage`: for each check, the floors, rooms or doors it looked at and those
