@@ -37,6 +37,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use\|finish] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working`; a file is always on light paper, so `--look dark` is refused ([below](#how-each-look-draws-a-plan)). `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation, section and schedule marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
+| `grid sheet [<plan>] --scale 1:N --paper A4\|A3\|A2\|A1\|A0 [--floor <id>] [--room-sizes on\|off] [--out <file.pdf>]` | Writes one floor at a true scale as a vector PDF, an SVG and a PNG, with a scale bar, caption, north and title block (`--layout drawing`, see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `type` (one named wall, door or window type, which every part of it takes; a list option such as `--parts` takes its items split at commas), `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
 | `grid diff [<plan>] [--since <name>\|git\|phase] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
@@ -851,6 +852,39 @@ stairs the plan states. Every figure comes from
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.
+
+### One floor at a true scale: `--layout drawing`
+
+`grid sheet [plan.json] --scale 1:100 --paper A4` (or `--layout drawing`) writes one floor as a
+drawing to print and measure: a vector PDF, an SVG and a PNG to share, into `exports/` beside the
+plan (`<name>-drawing.pdf`, `.svg` and `.png`; `<name>-floor-2-drawing` for the second floor of a
+plan with several), or beside the `.pdf` that `--out` names.
+
+- `--scale 1:N` (or `N`), a whole N from 1 to 1000. Printed at 100%, not fitted to the page, a
+  length on the paper times N is its length in the building: at 1:100 a 10 m wall is 100 mm.
+- `--paper A4|A3|A2|A1|A0`, turned the way the floor fits.
+- Left out, the scale is the largest of 1:100, 1:200 and 1:500 the floor fits, and the paper the
+  smallest that holds it at that scale. A floor too large for the paper asked for is refused, with
+  the paper that fits it at that scale and the scale that fits it on that paper.
+- `--floor <id>`: the floor drawn, the lowest when left out.
+- `--room-sizes on|off`: each room's width and depth along its walls. On when left out; the
+  dimensions outside the plan are always drawn.
+
+The floor is the technical look's drawing (`grid draw --look technical`): black on white, walls
+joined at their corners, dimensions along the walls, lines in millimetres from the pen set for
+the scale, and at 1:50 and larger the detail of each wall and opening. Its figures print at
+2.5 mm and its room names a little larger. Under it are a caption (what it is, which floor, the
+scale and paper), the notes (what the drawing leaves out, a door with no stated swing, a plan with
+no north), a scale bar in metres and the north arrow, turned to the north the plan states; with no
+north stated there is no arrow and a note says so. The title block, at the foot on the right,
+holds the project (the name in `sheet.json`, else the plan's title, else the file's name), the
+drawing, the scale and paper, the date, the status (Draft) and the label "General guidance, not
+your local rules". The sheet's own text is 2.5 mm for notes and labels, 3 to 3.5 mm for values and
+the caption, 5 mm for the drawing's name and 6 mm for the project's.
+
+The three files are one layout in paper millimetres: the SVG writes it (its size in `mm`), and the
+PDF and the PNG (150 dpi, at most 4,000 pixels on its longer side) draw it with Skia through the
+canvas, every line and letter of the PDF as vector, on Linux, macOS and Windows alike.
 
 ## Who sits where: `grid occupancy`
 

@@ -25,7 +25,7 @@ import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { FontsMissing } from '../sheet/fonts'
 import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
-import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject, sheetLanguage } from '../sheet/sheetFile'
+import { checkDrawingRequest, drawingIntoProject, drawingLine, drawingOutFiles, makeDrawing, makeSheet, readSheetWords, sheetIntoProject, sheetKindOf, sheetLanguage, type SheetRequest } from '../sheet/sheetFile'
 import { askedLanguage, languageFor } from './language'
 import { inLanguage } from './words'
 import { startToolServer } from '../mcp/serve'
@@ -126,8 +126,8 @@ const COMMANDS = {
     options: EXPORT_OPTIONS,
   },
   sheet: {
-    usage: 'grid sheet [<plan.json>] --layout client|check [--sheet <sheet.json>] [--out <file.pdf>] [--lang en|es] [--project <folder>]',
-    summary: 'Writes the plan as an A3 PDF for people: client (with the words of sheet.json) or check (ids and findings).',
+    usage: 'grid sheet [<plan.json>] --layout client|check|drawing [--sheet <sheet.json>] [--scale 1:N] [--paper A4|A3|A2|A1|A0] [--floor <id>] [--room-sizes on|off] [--out <file.pdf>] [--lang en|es] [--project <folder>]',
+    summary: 'Writes the plan as an A3 PDF for people (client, with the words of sheet.json, or check, with ids and findings), or one floor at a true scale as a PDF, SVG and PNG (drawing).',
     options: SHEET_OPTIONS,
   },
   tidy: {
@@ -260,6 +260,32 @@ function markAsk(parsed: ReturnType<typeof parseOptions>): MarkAsk | null {
   if (reason === undefined) throw new UsageError('--seen needs --reason: why the note is set aside, in one line.')
   if (by === undefined) throw new UsageError('--seen needs --by: who sets it aside, as the name or role you give.')
   return { mark: 'seen', number, reason, by }
+}
+
+/**
+ * SHT-6: `grid sheet --layout drawing` (or `--scale`, `--paper`): one floor at a true scale, as a
+ * PDF, an SVG and a PNG, into `exports/` beside the plan or beside `--out`'s PDF.
+ */
+async function drawingCommand(io: CommandIo, projectOption: string | undefined, planFile: string, request: SheetRequest): Promise<number> {
+  const asked = checkDrawingRequest(request)
+  const project = openProject(projectOption, io.cwd)
+  const words = readSheetWords(project, planFile, loadPlan(project, planFile), request.sheet)
+  if (request.out === undefined) {
+    const done = await drawingIntoProject(project, planFile, asked, words, sheetLanguage(request))
+    warnLeftOut(io, done.loaded)
+    if (done.note) io.stderr(`${done.note}\n`)
+    io.stdout(`${drawingLine(done.sheet)}\nWrote ${project.shown(done.written.pdf)}, ${project.shown(done.written.svg)} and ${project.shown(done.written.png)}\n`)
+    return EXIT_OK
+  }
+  const out = drawingOutFiles(request.out)
+  // Drawing a large plan takes seconds: a file that can't be written is refused first.
+  for (const file of [out.pdf, out.svg, out.png]) checkWritable(project, file)
+  const made = await makeDrawing(project, planFile, asked, words, sheetLanguage(request))
+  warnLeftOut(io, made.loaded)
+  if (made.note) io.stderr(`${made.note}\n`)
+  const written = [write(project, out.pdf, made.files.pdf), write(project, out.svg, made.files.svg), write(project, out.png, made.files.png)]
+  io.stdout(`${drawingLine(made.sheet)}\nWrote ${written.map((file) => project.shown(file)).join(', ').replace(/, ([^,]*)$/, ' and $1')}\n`)
+  return EXIT_OK
 }
 
 async function runCommand(name: CommandName, args: readonly string[], io: CommandIo): Promise<number> {
@@ -510,8 +536,13 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'sheet') {
-    const request = { layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out'), lang: textOf(parsed, '--lang') }
-    const layout = checkSheetRequest(request)
+    const request = {
+      layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out'), lang: textOf(parsed, '--lang'),
+      scale: textOf(parsed, '--scale'), paper: textOf(parsed, '--paper'), floor: textOf(parsed, '--floor'), roomSizes: textOf(parsed, '--room-sizes'),
+    }
+    const kind = sheetKindOf(request)
+    if (kind === 'drawing') return drawingCommand(io, projectOption, planFile, request)
+    const layout = kind
     const project = openProject(projectOption, io.cwd)
     const words = layout === 'client' ? readSheetWords(project, planFile, loadPlan(project, planFile), request.sheet) : null
     if (request.out === undefined) {

@@ -275,7 +275,7 @@ describe('the tools on a two-bedroom flat', () => {
     const withFloor = GRID_TOOLS.filter((tool) => 'floor' in tool.args).map((tool) => tool.name)
     expect(withFloor.length).toBeGreaterThanOrEqual(6)
     for (const name of withFloor) {
-      const args = name === 'grid_stretch' ? { side: 'east', by: 0.3, floor: 'basement-99' } : name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : { floor: 'basement-99' }
+      const args = name === 'grid_stretch' ? { side: 'east', by: 0.3, floor: 'basement-99' } : name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : name === 'grid_sheet' ? { plan: 'plan.json', layout: 'drawing', floor: 'basement-99' } : { floor: 'basement-99' }
       const reply = await b.call(name, args)
       expect(reply.isError, name).toBe(true)
       expect(reply.text, name).not.toContain('basement-99')

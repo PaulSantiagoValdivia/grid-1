@@ -22,11 +22,11 @@ import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, TURNS, turnPlanBy, type Direction, type From, type Mirror, type Patch, type Turn } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
-import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { checkSheetRequest, drawingIntoProject, drawingLine, readSheetWords, sheetIntoProject, type SheetKind } from '../sheet/sheetFile'
+import { PAPER_NAMES, SCALE_MAX } from '../sheet/drawingPapers'
 import { askedLanguage } from '../command/language'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import { writeScanIntoProject } from '../command/scan'
-import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
@@ -136,8 +136,9 @@ const exportTool: GridTool = {
 
 export const SHEET_TOOL_NAME = 'grid_sheet'
 
-/** The layout, checked as the command checks it, with the command's refusal in a tool's words. */
-function sheetLayoutOf(layout: unknown, withWords: boolean): SheetLayout {
+/** The layout, checked as the command checks it, with the command's refusal in a tool's words. SHT-6: drawing takes words too. */
+function sheetLayoutOf(layout: unknown, withWords: boolean): SheetKind {
+  if (layout === 'drawing') return 'drawing'
   try {
     return checkSheetRequest({ layout: layout as string | undefined, sheet: withWords ? 'sheet' : undefined })
   } catch (error) {
@@ -145,6 +146,9 @@ function sheetLayoutOf(layout: unknown, withWords: boolean): SheetLayout {
     throw error
   }
 }
+
+/** SHT-6: the arguments only a drawing at a scale takes. */
+const DRAWING_ARGS = ['scale', 'paper', 'floor', 'roomSizes'] as const
 
 const sheetTool: GridTool = {
   name: SHEET_TOOL_NAME,
@@ -155,10 +159,11 @@ const sheetTool: GridTool = {
     + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. The name is the one the person gave the building, else the plan\'s; never a name from an example. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
     + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. '
     + `${ROOM_NAMES_TRAVEL} `
+    + 'Layout drawing (SHT-6) is one floor to print and measure: drawn at a true scale (scale, N in 1:N) on a paper (A4 to A0), in black on white with walls joined, dimensions along the walls and room sizes, with a scale bar, a caption, north, a title block and the label; it writes a vector PDF, an SVG and a PNG, and returns the PNG to look at. Left out, the scale is the largest of 1:100, 1:200 and 1:500 the floor fits and the paper the smallest; a floor too large for the paper asked for is refused with what fits. '
     + 'Do not use for a single picture (grid_view) or a file for another program (grid_export).',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['plan.json'] },
-    layout: { type: 'string', required: true, enum: ['client', 'check'], description: 'client or check.', examples: ['client', 'check'] },
+    layout: { type: 'string', required: true, enum: ['client', 'check', 'drawing'], description: 'client, check, or drawing for one floor at a true scale.', examples: ['client', 'check', 'drawing'] },
     sheet: {
       type: 'object',
       description: 'Client only: the words, as sheet.json holds them. sheet.json beside the plan is read when left out.',
@@ -173,15 +178,49 @@ const sheetTool: GridTool = {
         return value
       },
     },
+    scale: { type: 'number', description: 'Drawing only: N in 1:N, a whole number, such as 50, 100 or 200. The largest of 100, 200 and 500 the floor fits when left out.', examples: [100, 50], minimum: 1, maximum: SCALE_MAX },
+    paper: { type: 'string', enum: PAPER_NAMES, description: 'Drawing only: the paper, turned the way the floor fits. The smallest that fits when left out.', examples: ['A4', 'A3'] },
+    floor: { ...FLOOR_ARG, description: 'Drawing only: the floor to draw. The lowest when left out.' },
+    roomSizes: { type: 'boolean', description: 'Drawing only: each room\'s width and depth along its walls. true when left out.', examples: [true, false] },
     language: LANGUAGE_ARG,
   },
-  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
+  outputSchema: objectSchema({
+    written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] },
+    // SHT-6: a drawing's other files, its scale and its paper; null for a client or check sheet.
+    svg: NULLABLE_STRING, png: NULLABLE_STRING, scale: { type: ['number', 'null'] }, paper: NULLABLE_STRING,
+  }),
   async run(args, context) {
-    // Already read: layout is one of the two, and words with a check sheet were refused there.
-    const layout = args['layout'] as SheetLayout
+    // Already read: layout is one of the three, and words with a check sheet were refused there.
+    const layout = args['layout'] as SheetKind
     const given = args['sheet'] as Record<string, unknown> | undefined
+    const drawingAsked = DRAWING_ARGS.filter((name) => args[name] !== undefined)
+    if (layout !== 'drawing' && drawingAsked.length > 0) {
+      throw new ToolRefusal(`${drawingAsked.join(' and ')} ${drawingAsked.length === 1 ? 'is' : 'are'} for layout drawing, not ${layout}: leave ${drawingAsked.length === 1 ? 'it' : 'them'} out.`)
+    }
+    if (args['scale'] !== undefined && !Number.isInteger(args['scale'])) throw new ToolRefusal('scale is N in 1:N, a whole number, such as 100.')
     try {
       const { project, file, loaded } = readPlan(context, args['plan'])
+      if (layout === 'drawing') {
+        const words = given !== undefined ? parseSheetWords(given, planFloors(loaded.plan).map((floor) => floor.id)) : readSheetWords(project, file, loaded, undefined)
+        const asked = {
+          ...(args['scale'] === undefined ? {} : { scale: args['scale'] as number }),
+          ...(args['paper'] === undefined ? {} : { paper: args['paper'] as (typeof PAPER_NAMES)[number] }),
+          ...(args['floor'] === undefined ? {} : { floor: floorArg(loaded.plan, args['floor']) }),
+          ...(args['roomSizes'] === undefined ? {} : { roomSizes: args['roomSizes'] as boolean }),
+        }
+        const done = await drawingIntoProject(project, file, asked, words, askedLanguage(args['language'], 'language'))
+        const written = { pdf: project.relative(done.written.pdf), svg: project.relative(done.written.svg), png: project.relative(done.written.png) }
+        const lines = [drawingLine(done.sheet), `Wrote ${quoted(written.pdf)}, ${quoted(written.svg)} and ${quoted(written.png)} in the project folder. Print the PDF at 100%, not fitted to the page, to keep the scale. Look at the picture before you describe it.`]
+        if (done.note) lines.push(done.note)
+        const leftOut = done.loaded.broken.size
+        if (leftOut > 0) lines.push(leftOutLine(leftOut))
+        const pages = [{ kind: 'drawing', title: done.sheet.words.drawing, floor: done.sheet.floor }]
+        return {
+          text: lines.join('\n'),
+          data: { written: written.pdf, layout, pages, leftOut, note: done.note ?? null, svg: written.svg, png: written.png, scale: done.sheet.scale, paper: done.sheet.paper.name },
+          image: { data: done.png, mimeType: 'image/png' as const },
+        }
+      }
       const words = layout === 'check'
         ? null
         : given !== undefined
@@ -193,7 +232,7 @@ const sheetTool: GridTool = {
       if (done.note) lines.push(done.note)
       const leftOut = done.loaded.broken.size
       if (leftOut > 0) lines.push(leftOutLine(leftOut))
-      return { text: lines.join('\n'), data: { written, layout, pages: done.pages, leftOut, note: done.note ?? null } }
+      return { text: lines.join('\n'), data: { written, layout, pages: done.pages, leftOut, note: done.note ?? null, svg: null, png: null, scale: null, paper: null } }
     } catch (error) {
       if (error instanceof SheetWordsRefused) throw new ToolRefusal(`The sheet words: ${error.message}.`)
       if (error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)

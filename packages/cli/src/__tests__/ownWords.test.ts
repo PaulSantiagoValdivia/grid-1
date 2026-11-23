@@ -52,7 +52,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/planText.ts': [19, 'command'],
   'packages/cli/src/command/scan.ts': [22, 'command'],
   'packages/cli/src/command/section.ts': [6, 'command'],
-  'packages/cli/src/command/sheet.ts': [3, 'command'],
+  // SHT-6: four more, the help of --scale, --paper, --floor and --room-sizes.
+  'packages/cli/src/command/sheet.ts': [7, 'command'],
   'packages/cli/src/command/tidy.ts': [12, 'command'],
   'packages/cli/src/command/write.ts': [32, 'command'],
   'packages/cli/src/describe/card.ts': [13, 'agentForm'],
@@ -97,7 +98,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/serveTools.ts': [1, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [120, 'tools'],
+  // SHT-6: eight more, grid_sheet's layout drawing, its arguments and its refusals.
+  'packages/cli/src/mcp/writeTools.ts': [128, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
   'packages/cli/src/preview/localServer.ts': [6, 'agent'],
   'packages/cli/src/preview/record.ts': [4, 'command'],
@@ -125,8 +127,11 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
   // CNT-16: +1, the columns' place on the sheet ("drawn and tabled").
   'packages/cli/src/sheet/coverage.ts': [29, 'developer'],
+  // SHT-6: the refusal of a floor too large for the paper.
+  'packages/cli/src/sheet/drawingSheet.ts': [1, 'command'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
-  'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
+  // SHT-6: nine more, the drawing's refusals, its answer line and its file note.
+  'packages/cli/src/sheet/sheetFile.ts': [16, 'command'],
   'packages/cli/src/versions/diff.ts': [10, 'notYet'],
   'packages/cli/src/versions/git.ts': [19, 'notYet'],
   'packages/cli/src/versions/markers.ts': [19, 'notYet'],
@@ -271,8 +276,10 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // finish refusal and receipts (merge.ts 2), the estimate's type and finish rules and lines
     // (estimate.ts 6), the finish and wall type rules (finishes.ts 2), the IFC's two type notes
     // (ifc.ts 2) and the schema's three blank-name refusals (floorplan.ts 3) (reviews/CNT-15.md);
-    // and SHT-10 1: grid draw's refusal of --look dark for a file (draw.ts) (reviews/SHT-10.md).
-    expect(left).toBeLessThanOrEqual(1541)
+    // and SHT-10 1: grid draw's refusal of --look dark for a file (draw.ts) (reviews/SHT-10.md);
+    // and SHT-6 13: grid sheet's drawing options, refusals and answer (command/sheet.ts,
+    // sheet/sheetFile.ts, sheet/drawingSheet.ts and main.ts together) (reviews/SHT-6.md).
+    expect(left).toBeLessThanOrEqual(1554)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
