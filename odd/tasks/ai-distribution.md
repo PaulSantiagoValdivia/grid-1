@@ -39,10 +39,10 @@ Approval: the owner approved this plan on 23 Nov 2026 (implementation, tests, re
 
 ## Tasks
 
-- [ ] 1. Hosted transport (#19, #2): `grid mcp --http` serves the same tools over Streamable HTTP,
+- [x] 1. Hosted transport (#19, #2): `grid mcp --http` serves the same tools over Streamable HTTP,
   stateless; each call carries the plan JSON instead of a path; no file is read or written on the
   host. Writer: agent A, worktree. Checks: typecheck, lint, test.
-- [ ] 2. MCP Apps viewer (#19): a `ui://` resource that shows the plan from the existing viewer,
+- [x] 2. MCP Apps viewer (#19): a `ui://` resource that shows the plan from the existing viewer,
   served by the same server, no third-party frames. Writer: agent A after task 1.
 - [x] 3. Site drafts (#5, #8, #6 Spanish, #23, #24): `site/` with robots.txt, sitemap.xml,
   llms.txt, llms-full.txt, OG and JSON-LD in an index page, privacy policy, support page, Spanish
