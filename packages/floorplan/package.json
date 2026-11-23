@@ -26,7 +26,8 @@
     "./test-support/lab": "./src/test-support/lab.ts",
     "./test-support/roomScan": "./src/test-support/roomScan.ts",
     "./test-support/through": "./src/test-support/through.ts",
-    "./test-support/columns": "./src/test-support/columns.ts"
+    "./test-support/columns": "./src/test-support/columns.ts",
+    "./test-support/parking": "./src/test-support/parking.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

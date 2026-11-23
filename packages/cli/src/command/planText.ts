@@ -81,6 +81,9 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   // has a name (its floors and its lines' names are in the schema's own text checks).
   columns: { id: 'id', floor: 'id', through: 'id', label: 'name' },
   grids: { id: 'id', name: 'name' },
+  // CNT-19: a bay's number is held to an id's limit; a ramp names the two floors it joins.
+  bays: { id: 'id', number: 'id', floor: 'id' },
+  ramps: { id: 'id', name: 'name', from: 'id', to: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

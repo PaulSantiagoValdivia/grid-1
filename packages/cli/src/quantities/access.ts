@@ -64,7 +64,7 @@ export const ACCESS_RULE =
 export const NOT_LOOKED_AT: readonly string[] = [
   'the swing and weight of a door leaf, the floor beside a door\'s handle side, and its handles;',
   'any threshold, mat or edge at a door other than the sill the plan states for it, and any change of level other than the rooms\' floor offsets;',
-  'ramps: the plan cannot state one, so no slope, length or landing is measured;',
+  'ramps: a ramp the plan states between two floors is for vehicles and is not measured here, and one within a floor cannot be stated, so no slope, length or landing is measured;',
   'inside a lift: its car, its doors and its controls;',
   'fittings and furniture the plan does not hold: a WC, basin, bath, grab rail or bed is measured round only when the plan holds it as a fixture;',
   'surfaces, lighting, colour contrast, and the height of switches, sockets, handles and worktops;',

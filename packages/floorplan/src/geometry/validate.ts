@@ -57,6 +57,7 @@ import { flatIssues } from './flats'
 import { buildingIssues } from './buildings'
 import { typeIssues } from './partTypes'
 import { columnIssues } from './columns'
+import { parkingIssues } from './parking'
 import { gridIssues } from './structuralGrid'
 
 /**
@@ -1400,6 +1401,10 @@ export function validatePlan(
   // CNT-16 (C25): the columns' and the structural grids' own faults.
   issues.push(...columnIssues(plan))
   issues.push(...gridIssues(plan))
+  // CNT-19 (C29): the parking bays' own faults, and what is worth a look on them. The ramps' are
+  // said with the stairs': a ramp is laid out from the floors' levels, which read this check
+  // without its spaces, so it must not run there.
+  issues.push(...parkingIssues(plan, { ramps: options.spaces !== false }))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
   if (options.spaces !== false) validateStairs(plan, broken, issues)

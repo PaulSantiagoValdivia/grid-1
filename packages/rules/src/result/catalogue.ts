@@ -525,6 +525,22 @@ export const CODES = {
   'plan/column-unknown-floor': {},
   'plan/column-through-floor': {},
   'plan/grid-unknown-floor': {},
+  // --- Parking bays and ramps (CNT-19) -------------------------------------------------------
+  // A bay's or a ramp's own faults leave it out of every view, count and export; two bays with
+  // one number, two that overlap and a ramp whose stated slope is not its levels' are worth a
+  // look and kept. The found is the check's own sentence.
+  'plan/bay-too-large': {},
+  'plan/bay-duplicate-id': {},
+  'plan/bay-unknown-floor': {},
+  'plan/bay-number-repeated': {},
+  'plan/bays-overlap': {},
+  'plan/ramp-too-large': {},
+  'plan/ramp-duplicate-id': {},
+  'plan/ramp-unknown-floor': {},
+  'plan/ramp-same-floor': {},
+  'plan/ramp-no-rise': {},
+  'plan/ramp-no-run': {},
+  'plan/ramp-slope-differs': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},

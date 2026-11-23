@@ -276,6 +276,25 @@
  *   outside. An outdoor space on the lowest level stands on the ground, with no slab, and only a
  *   roofed one has a roof. Its `use`, when stated, is kept, and no check reads it. Optional and
  *   never defaulted: a plan with none reads exactly as before (version 1).
+
+ *
+ * C29 · Parking bays and ramps (CNT-19, lab EL-11)
+ *   A plan MAY hold `bays`: each a parking bay, a thing of its own, never a room or a wall. `at` is
+ *   its middle on the plan, `width` its size across (side to side) and `length` its size along
+ *   (the way a car drives in), in metres; unturned its length runs along the plan's y, and `turn`
+ *   turns it counter-clockwise about its middle, in degrees. `number` is the bay's own number as
+ *   marked (text: `12`, `B1-07`). It stands on its `floor` (C5). Bays are counted per floor; a bay
+ *   takes nothing off a room's area, and two bays of one floor may not share a number.
+ *   A plan MAY hold `ramps`: each a way for vehicles between two floors, stated once across them
+ *   as a stair is: `from` and `to` are the floors it joins (either may be the higher), `width` its
+ *   width across its middle line, and `run` that middle line on the plan, from its edge on `from`
+ *   to its edge on `to` (a straight ramp may say `start` and `end` instead); each point between is
+ *   a turn. The two levels it joins are the floors' levels in metres (C5) and its slope, in
+ *   percent (metres of rise per 100 metres along its run), is worked out from them. `slope` MAY
+ *   state the slope the design means, also in percent; Grid keeps it and says when the levels and
+ *   the run give another. A ramp opens the slab of its upper floor over it. Whether a car can turn
+ *   into a bay or up a ramp is a swept-path check these make possible and Grid does not make. All
+ *   optional and never defaulted (version 1): a plan that states none reads exactly as before.
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -2101,6 +2120,51 @@ export const StructuralGridSchema = z
   })
 
 /**
+ * CNT-19 (C29): a parking bay, a thing of its own: never a room or a wall. `at` is its middle,
+ * `width` its size across and `length` its size along, in metres; unturned, its length runs along
+ * the plan's y, and `turn` turns it about its middle in degrees, counter-clockwise. `number` is its
+ * number as marked, as text. It stands on `floor` (C5: unstated, the ground floor).
+ */
+export const BaySchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: english(said('read.bay.blankNumber')) })).optional(),
+  at: Vec2,
+  width: finite().positive(),
+  length: finite().positive(),
+  turn: finite().optional(),
+  floor: text('id').pipe(z.string().min(1)).optional(),
+})
+
+/** CNT-19: the most points a ramp's middle line may have, as a stair's walking line. */
+export const RAMP_RUN_MAX = STAIR_RUN_MAX
+
+/**
+ * CNT-19 (C29): a ramp for vehicles between two floors, stated once across them as a stair is.
+ * `from` and `to` are the floors it joins, either the higher; `run` is its middle line from its
+ * edge on `from` to its edge on `to` (a straight one may say `start` and `end`); `width` is its
+ * width across that line. `slope` is the slope the design states, in percent; Grid works the
+ * slope out from the floors' levels and the run, and says when the two differ.
+ */
+export const RampSchema = z.preprocess(withRunFromEnds, z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  from: text('id').pipe(z.string().min(1)),
+  to: text('id').pipe(z.string().min(1)),
+  width: finite().positive(),
+  run: z
+    .array(Vec2)
+    .min(2)
+    .superRefine((list, ctx) => {
+      if (list.length <= RAMP_RUN_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: english(said('read.ramp.tooManyPoints', { count: list.length, most: RAMP_RUN_MAX })),
+      })
+    }),
+  slope: finite().positive().optional(),
+}))
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
@@ -2235,6 +2299,10 @@ export const FloorPlanFieldsSchema = z.object({
   // each its named lines (`StructuralGridSchema`). Optional and never defaulted (version 1).
   columns: parts(ColumnSchema, 'columns').optional(),
   grids: parts(StructuralGridSchema, 'structural grids').optional(),
+  // CNT-19 (C29): the parking bays (`BaySchema`) and the ramps between floors (`RampSchema`).
+  // Optional and never defaulted (version 1).
+  bays: parts(BaySchema, 'parking bays').optional(),
+  ramps: parts(RampSchema, 'ramps').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -2310,6 +2378,8 @@ export type ContextShape = z.infer<typeof ContextShapeSchema>
 export type Column = z.infer<typeof ColumnSchema>
 export type StructuralGrid = z.infer<typeof StructuralGridSchema>
 export type GridLines = z.infer<typeof GridLinesSchema>
+export type Bay = z.infer<typeof BaySchema>
+export type Ramp = z.infer<typeof RampSchema>
 export type BeyondWall = (typeof BEYOND_WALL)[number]
 export type WallType = z.infer<typeof WallTypeSchema>
 export type DoorType = z.infer<typeof DoorTypeSchema>

@@ -1891,7 +1891,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
               ref(c.owner),
               str(`Opening over ${over}`),
               NULL,
-              str(opening.kind === 'void' ? 'Void' : opening.kind === 'lift' ? 'Lift shaft' : 'Stair'),
+              str(opening.kind === 'void' ? 'Void' : opening.kind === 'lift' ? 'Lift shaft' : opening.kind === 'ramp' ? 'Ramp' : 'Stair'),
               ref(placement(c.w, written.placement, [0, 0, -VOID_CLEARANCE])),
               ref(shape),
               NULL

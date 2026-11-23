@@ -43,12 +43,14 @@ const pairs = (values: readonly unknown[]): Pair2[] =>
  * Where the plan's zero goes in an export: (0, 0) for a plan near it, else the site's origin, else
  * the middle of its walls in whole steps of `farFromOrigin`.
  */
-export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids'>): Pair2 {
+export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids' | 'bays' | 'ramps'>): Pair2 {
   const wallPoints = pairs(plan.walls.flatMap((wall) => [wall.start, wall.end]))
   const others = pairs([
     ...(plan.items ?? []).map((item) => item.at),
     ...(plan.columns ?? []).map((column) => column.at),
-    ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : []))
+    ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : [])),
+    ...(plan.bays ?? []).map((bay) => bay.at),
+    ...(plan.ramps ?? []).flatMap((ramp) => (Array.isArray(ramp.run) ? ramp.run : []))
   ])
   if ([...wallPoints, ...others].some(([x, y]) => Math.hypot(x, y) > limit('largest'))) return [0, 0]
   if (!wallPoints.some(([x, y]) => Math.hypot(x, y) > limit('farFromOrigin'))) return [0, 0]
@@ -64,10 +66,10 @@ export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' 
 
 /**
  * The plan as an export writes it, near zero, and where its zero went (`exportOrigin`). The
- * walls, the fixtures, the stairs, the columns and the grids are moved; `site.origin` is not, so it stays the plan's own
+ * walls, the fixtures, the stairs, the columns, the grids, the bays and the ramps are moved; `site.origin` is not, so it stays the plan's own
  * point. Everything else is a size, or is placed by a wall.
  */
-export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids'>>(plan: P): NearOrigin<P> {
+export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids' | 'bays' | 'ramps'>>(plan: P): NearOrigin<P> {
   const at = exportOrigin(plan)
   if (at[0] === 0 && at[1] === 0) return { plan, at: [0, 0] }
   function move<T>(value: T): T {
@@ -85,7 +87,10 @@ export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs
       ...(plan.grids === undefined ? {} : { grids: plan.grids.map((grid) => ({ ...grid, origin: move(grid.origin) })) }),
       ...(plan.stairs === undefined
         ? {}
-        : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) })
+        : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) }),
+      // CNT-19: a bay by its middle, a ramp by its middle line.
+      ...(plan.bays === undefined ? {} : { bays: plan.bays.map((bay) => ({ ...bay, at: move(bay.at) })) }),
+      ...(plan.ramps === undefined ? {} : { ramps: plan.ramps.map((ramp) => (Array.isArray(ramp.run) ? { ...ramp, run: ramp.run.map(move) } : ramp)) })
     },
     at
   }

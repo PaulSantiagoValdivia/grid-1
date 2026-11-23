@@ -23,8 +23,8 @@
 
 export type ToleranceKind = 'tolerance' | 'limit' | 'arithmetic'
 
-/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit; `mm` is a lens's focal length (VEW-3). */
-export type ToleranceUnit = 'm' | 'm²' | 'mm' | 'degree' | 'radian' | 'sine' | 'ratio' | 'count'
+/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit; `mm` is a lens's focal length (VEW-3); `%` a slope's percentage points (CNT-19). */
+export type ToleranceUnit = 'm' | 'm²' | 'mm' | 'degree' | 'radian' | 'sine' | 'ratio' | 'count' | '%'
 
 /** The kinds of building a limit can depend on, as the plan says it (`buildingKind`). */
 export type BuildingKind = 'any' | 'home'
@@ -905,6 +905,26 @@ export const TOLERANCES = {
     decides:
       'How far a structural grid\'s lines are drawn past the outermost line across them, where ' +
       'their names are written and their spacing is dimensioned.',
+    basis: own
+  },
+
+  // ── Parking bays and ramps (CNT-19) ───────────────────────────────────────────────────────
+  bayOverlap: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm²',
+    decides:
+      'Two parking bays of one floor that share more floor than this overlap: each is still ' +
+      'counted, and the warning says the floor holds fewer bays than it counts.',
+    basis: own
+  },
+  rampSlopeDiffers: {
+    kind: 'tolerance',
+    value: 0.5,
+    unit: '%',
+    decides:
+      'A ramp\'s stated slope further than this, in percentage points, from the slope its two ' +
+      'levels and its run give is worth a look; both are kept and returned.',
     basis: own
   },
 

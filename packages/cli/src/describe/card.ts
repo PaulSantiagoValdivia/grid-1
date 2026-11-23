@@ -25,6 +25,7 @@
  */
 import { decimalFor, DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type SayOptions, type Values } from '@ongrid/floorplan/messages'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { slopeText } from '@ongrid/floorplan/geometry'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
 export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls', 'walk'] as const
@@ -619,6 +620,47 @@ function agentColumns(floor: FloorFacts): string[] {
   return [`COLUMNS ${columns.map((c) => `${c.id} ${c.depth === null ? `rd${m(c.width)}` : `sq${m(c.width)}x${m(c.depth)}`} @${m(c.at.x)},${m(c.at.y)} ${c.room ?? '-'}`).join('; ')}`]
 }
 
+/** CNT-19: bay numbers with each run of whole numbers one after another said as a range: 1 to 16, 20. */
+function numberRuns(numbers: readonly string[], range: (from: string, to: string) => string): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < numbers.length) {
+    let j = i
+    while (j + 1 < numbers.length && /^\d+$/.test(numbers[j]!) && /^\d+$/.test(numbers[j + 1]!) && Number(numbers[j + 1]) === Number(numbers[j]) + 1) j++
+    out.push(j - i >= 2 ? range(numbers[i]!, numbers[j]!) : numbers[i]!)
+    if (j - i === 1) out.push(numbers[j]!)
+    i = j + 1
+  }
+  return out
+}
+
+/** CNT-19: a floor's parking bays, counted with their numbers, and the ramps that start or end on it; nothing on a floor with none. */
+function personParking(floor: FloorFacts, names: PersonNames, w: Words): string[] {
+  const lines: string[] = []
+  const bays = floor.bays
+  if (bays !== undefined && bays.count > 0) {
+    const numbers = numberRuns(bays.numbers, (from, to) => t(w, 'describe.bays.range', { from, to }))
+    const each = [...numbers, ...(bays.unnumbered === 0 ? [] : [t(w, 'describe.bays.unnumbered', { count: bays.unnumbered })])]
+    lines.push(`  ${t(w, 'describe.bays', { count: bays.count, numbers: listed(w, each) })}`)
+  }
+  for (const r of floor.ramps ?? []) {
+    lines.push(`  ${t(w, 'describe.ramp', { ramp: r.name, lower: names.floor(r.lower), upper: names.floor(r.upper), rise: fig(w, r.rise), length: fig(w, r.length), slope: num(slopeText(r.slope)) })}`)
+  }
+  return lines
+}
+
+/** CNT-19: the agent's form: `BAYS <count> numbers <runs>` and `RAMP id lower->upper rise <m> length <m> slope <percent>%`. */
+function agentParking(floor: FloorFacts): string[] {
+  const lines: string[] = []
+  const bays = floor.bays
+  if (bays !== undefined && bays.count > 0) {
+    const numbers = numberRuns(bays.numbers, (from, to) => `${from}-${to}`)
+    lines.push(`BAYS ${bays.count}${numbers.length === 0 ? '' : ` numbers ${numbers.join(',')}`}${bays.unnumbered === 0 ? '' : ` unnumbered ${bays.unnumbered}`}`)
+  }
+  for (const r of floor.ramps ?? []) lines.push(`RAMP ${r.id} ${r.lower}->${r.upper} rise ${m(r.rise)} length ${m(r.length)} slope ${slopeText(r.slope)}%`)
+  return lines
+}
+
 function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {
   const names = new PersonNames(facts, w)
   const lines = [
@@ -638,6 +680,7 @@ function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {
     lines.push('', personFloorHead(floor, names, w))
     for (const room of floor.rooms) lines.push(...personRoom(floor, room, names, w))
     lines.push(...personColumns(floor, names, w))
+    lines.push(...personParking(floor, names, w))
     if (withWalls && floor.walls.length > 0) lines.push(t(w, 'describe.walls', { floor: names.floor(floor.id) }), ...personWalls(floor, names, w))
   }
   lines.push('', t(w, 'describe.close'))
@@ -660,6 +703,7 @@ function agentCard(facts: PlanFacts, withWalls: boolean): string[] {
     lines.push(`${agentFloorHead(floor)}${repeat !== null ? `; laid out as ${repeat.of}, other ids` : ''}`)
     for (const room of floor.rooms) lines.push(withWalls ? agentRoomHead(room) : agentRoom(floor, room))
     lines.push(...agentColumns(floor))
+    lines.push(...agentParking(floor))
     if (withWalls) lines.push(...agentWalls(floor))
   }
   lines.push(AGENT_CLOSE)
