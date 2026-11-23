@@ -37,7 +37,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/brief/layout.ts': [12, 'notYet'],
   'packages/cli/src/brief/lines.ts': [20, 'notYet'],
   'packages/cli/src/command/check.ts': [10, 'command'],
-  'packages/cli/src/command/describe.ts': [9, 'command'],
+  'packages/cli/src/command/describe.ts': [10, 'command'],
   'packages/cli/src/command/diff.ts': [13, 'command'],
   // SHT-10: one more, the refusal of --look dark for a file.
   'packages/cli/src/command/draw.ts': [45, 'command'],
@@ -67,6 +67,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/draw/drawStill.ts': [2, 'developer'],
   'packages/cli/src/draw/stamp.ts': [1, 'notWords'],
   'packages/cli/src/edit/addRoom.ts': [19, 'notYet'],
+  'packages/cli/src/edit/place.ts': [11, 'notYet'],
   'packages/cli/src/edit/edits.ts': [56, 'notYet'],
   'packages/cli/src/edit/merge.ts': [25, 'notYet'],
   'packages/cli/src/edit/types.ts': [14, 'notYet'],
@@ -80,17 +81,20 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/export/projectExports.ts': [2, 'command'],
   'packages/cli/src/firm/standards.ts': [18, 'command'],
   'packages/cli/src/fs/projectFiles.ts': [49, 'command'],
+  'packages/cli/src/library/answer.ts': [9, 'notYet'],
+  'packages/cli/src/library/office.ts': [6, 'notYet'],
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
   'packages/cli/src/mcp/briefTool.ts': [44, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
-  'packages/cli/src/mcp/editTools.ts': [73, 'tools'],
+  'packages/cli/src/mcp/editTools.ts': [84, 'tools'],
   // ARE-14: grid_areas' outdoor_rules argument, its schema and its checks.
   'packages/cli/src/mcp/outdoorRulesArg.ts': [12, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
   // ARE-14: one more, grid_areas' description of the party walls, free floor and outdoor_rules.
   // CNT-19: one more, grid_takeoff's description of the parking bays and the ramps.
-  'packages/cli/src/mcp/readTools.ts': [317, 'tools'],
+  // CNT-20: two more, the place tool and the library in the tools' descriptions.
+  'packages/cli/src/mcp/readTools.ts': [319, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -126,7 +130,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
   // CNT-16: +1, the columns' place on the sheet ("drawn and tabled").
-  'packages/cli/src/sheet/coverage.ts': [29, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [30, 'developer'],
   // SHT-6: the refusal of a floor too large for the paper.
   'packages/cli/src/sheet/drawingSheet.ts': [1, 'command'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
@@ -157,7 +161,11 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   // CNT-16: +5, what the three column and grid entries decide.
   // SHT-10: five more pieces of the table's own descriptions (sillProjection, and the frame and glass entries).
   // CNT-19: four more, what bayOverlap and rampSlopeDiffers decide.
-  'packages/floorplan/src/geometry/tolerances.ts': [259, 'developer'],
+  // CNT-20: two more, its own tolerance entries.
+  'packages/floorplan/src/geometry/tolerances.ts': [261, 'developer'],
+  'packages/floorplan/src/geometry/itemKinds.ts': [2, 'developer'],
+  'packages/floorplan/src/library/builtIn.ts': [1, 'provenance'],
+  'packages/floorplan/src/library/index.ts': [4, 'notYet'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [2, 'developer'],
@@ -171,7 +179,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
   'packages/floorplan/src/scan/roomModel.ts': [22, 'notYet'],
   'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [59, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [60, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -278,8 +286,12 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (ifc.ts 2) and the schema's three blank-name refusals (floorplan.ts 3) (reviews/CNT-15.md);
     // and SHT-10 1: grid draw's refusal of --look dark for a file (draw.ts) (reviews/SHT-10.md);
     // and SHT-6 13: grid sheet's drawing options, refusals and answer (command/sheet.ts,
-    // sheet/sheetFile.ts, sheet/drawingSheet.ts and main.ts together) (reviews/SHT-6.md).
-    expect(left).toBeLessThanOrEqual(1554)
+    // sheet/sheetFile.ts, sheet/drawingSheet.ts and main.ts together) (reviews/SHT-6.md);
+    // and CNT-20 32: the place tool's receipts (edit/place.ts 11), the library's answer and its
+    // rule (library/answer.ts 9), the office folder's problems (library/office.ts 6), the
+    // library's refusals (library/index.ts 4), the schema's library mark (floorplan.ts 1) and
+    // describe's furniture heading (1) (reviews/CNT-20.md).
+    expect(left).toBeLessThanOrEqual(1586)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

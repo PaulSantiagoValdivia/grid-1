@@ -14,7 +14,7 @@
  * Pure: a plan in, shapes and issues out.
  */
 
-import { ITEM_KINDS, type Item, type ItemKind } from '../types/floorplan'
+import type { Item, ItemKind } from '../types/floorplan'
 import type { Said, Value } from '../messages/say'
 import { english, joined, name, num, said } from '../messages/say'
 import { pointSaid, withSaid } from './issueWords'
@@ -32,21 +32,15 @@ import { wallPlanSlices } from './wall'
 import { nearestFloorId } from './levels'
 import { metresText } from './rounding'
 import type { Issue } from './validate'
+import { ITEM_KIND_DEFINITIONS, isItemKind, isOwnItemKind, itemKindDefinition, itemKinds, takesFloor, type ItemSymbol, type SymbolPen } from './itemKinds'
+import { BUILT_IN_ITEMS, builtInItem } from '../library/builtIn'
+import { likelyId } from '../types/nearest'
 
 export { ITEM_KINDS, type Item, type ItemKind } from '../types/floorplan'
+export { isItemKind, type ItemSymbol } from './itemKinds'
 
-/** What a person calls each kind, in a sentence. */
-export const ITEM_KIND_WORDS: Readonly<Record<ItemKind, string>> = {
-  toilet: 'toilet',
-  basin: 'basin',
-  shower: 'shower',
-  bath: 'bath',
-  'kitchen-run': 'kitchen run'
-}
-
-export function isItemKind(kind: string): kind is ItemKind {
-  return (ITEM_KINDS as readonly string[]).includes(kind)
-}
+/** What a person calls each of Grid's own kinds, in a sentence (`itemKindWord` for any kind). */
+export const ITEM_KIND_WORDS: Readonly<Record<ItemKind, string>> = Object.fromEntries(ITEM_KIND_DEFINITIONS.map((d) => [d.kind, d.word])) as Record<ItemKind, string>
 
 /** An item's name starting a line: its kind, then its id (`itemNounSaid`, in English). */
 export function itemNoun(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
@@ -64,12 +58,12 @@ export function itemName(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
 
 /** `itemNoun` by its key and values (MSG-11). */
 export function itemNounSaid(item: Pick<Item, 'id' | 'kind'>): Said {
-  return said(`issue.part.Item.${isItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
+  return said(`issue.part.Item.${isOwnItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
 }
 
 /** `itemName` by its key and values (MSG-11). */
 export function itemNameSaid(item: Pick<Item, 'id' | 'kind' | 'label'>): Said {
-  const kind = said(`issue.part.item.${isItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
+  const kind = said(`issue.part.item.${isOwnItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
   return item.label === undefined || item.label.trim() === '' ? kind : said('issue.part.labelled', { label: name(item.label), kind })
 }
 
@@ -142,90 +136,59 @@ export function roomShapes(index: PlanIndex, broken: ReadonlySet<string> = new S
 
 // ── How it is drawn ──────────────────────────────────────────────────────────────────────────
 
-/** How a fixture is drawn: closed rings filled with the paper, in order, and open lines over them. */
-export interface ItemSymbol {
-  readonly rings: readonly (readonly Vec2[])[]
-  readonly lines: readonly (readonly Vec2[])[]
-}
-
-/** Points round an ellipse, in shares of the item. */
-function ellipse(f: Frame, u: number, v: number, ru: number, rv: number, steps = 24): Vec2[] {
-  const out: Vec2[] = []
-  for (let i = 0; i < steps; i++) {
-    const t = (2 * Math.PI * i) / steps
-    out.push(point(f, u + ru * Math.cos(t), v + rv * Math.sin(t)))
+/** The pen a kind's symbol is drawn with, in shares of the item's footprint (`SymbolPen`). */
+function penOf(f: Frame): SymbolPen {
+  const ellipse = (u: number, v: number, ru: number, rv: number, steps = 24): Vec2[] => {
+    const out: Vec2[] = []
+    for (let i = 0; i < steps; i++) {
+      const t = (2 * Math.PI * i) / steps
+      out.push(point(f, u + ru * Math.cos(t), v + rv * Math.sin(t)))
+    }
+    return out
   }
-  return out
-}
-
-/** A circle `r` metres across its radius, its middle in shares of the item. */
-function circle(f: Frame, u: number, v: number, r: number, steps = 16): Vec2[] {
-  return ellipse(f, u, v, r / f.width, r / f.depth, steps)
-}
-
-/** A box in shares of the item. */
-function box(f: Frame, u0: number, v0: number, u1: number, v1: number): Vec2[] {
-  return [point(f, u0, v0), point(f, u1, v0), point(f, u1, v1), point(f, u0, v1)]
-}
-
-/** A box with rounded corners of radius `r` metres, in shares of the item. */
-function roundedBox(f: Frame, u0: number, v0: number, u1: number, v1: number, r: number, steps = 4): Vec2[] {
-  const ru = r / f.width
-  const rv = r / f.depth
-  const corners: [number, number, number][] = [
-    [u1 - ru, v0 + rv, -Math.PI / 2],
-    [u1 - ru, v1 - rv, 0],
-    [u0 + ru, v1 - rv, Math.PI / 2],
-    [u0 + ru, v0 + rv, Math.PI]
-  ]
-  const out: Vec2[] = []
-  for (const [cu, cv, from] of corners) {
-    for (let i = 0; i <= steps; i++) {
-      const t = from + (Math.PI / 2) * (i / steps)
-      out.push(point(f, cu + ru * Math.cos(t), cv + rv * Math.sin(t)))
+  return {
+    width: f.width,
+    depth: f.depth,
+    point: (u, v) => point(f, u, v),
+    box: (u0, v0, u1, v1) => [point(f, u0, v0), point(f, u1, v0), point(f, u1, v1), point(f, u0, v1)],
+    ellipse,
+    circle: (u, v, r, steps = 16) => ellipse(u, v, r / f.width, r / f.depth, steps),
+    roundedBox: (u0, v0, u1, v1, r, steps = 4) => {
+      const ru = r / f.width
+      const rv = r / f.depth
+      const corners: [number, number, number][] = [
+        [u1 - ru, v0 + rv, -Math.PI / 2],
+        [u1 - ru, v1 - rv, 0],
+        [u0 + ru, v1 - rv, Math.PI / 2],
+        [u0 + ru, v0 + rv, Math.PI]
+      ]
+      const out: Vec2[] = []
+      for (const [cu, cv, from] of corners) {
+        for (let i = 0; i <= steps; i++) {
+          const t = from + (Math.PI / 2) * (i / steps)
+          out.push(point(f, cu + ru * Math.cos(t), cv + rv * Math.sin(t)))
+        }
+      }
+      return out
     }
   }
-  return out
 }
 
 /**
- * The symbol of a fixture, drawn inside its footprint:
- *
- * - toilet: the cistern against its back and the pan, an oval, in front of it;
- * - basin: its outline with the bowl, an oval, and the tap at its back;
- * - shower: the tray with both diagonals, falling to the waste in its middle;
- * - bath: its outline with the tub inside, rounded, and the waste at its left end;
- * - kitchen run: the worktop's outline.
+ * The symbol of an item, drawn inside its footprint by its kind's entry in the registry
+ * (`itemKinds.ts`). Null for a kind Grid does not hold.
  */
-export function itemSymbol(item: Item & { readonly kind: ItemKind }): ItemSymbol {
-  const f = frameOf(item)
-  const short = Math.min(f.width, f.depth)
-  const outline = box(f, -0.5, -0.5, 0.5, 0.5)
-  switch (item.kind) {
-    case 'toilet':
-      return { rings: [box(f, -0.5, -0.5, 0.5, -0.2), ellipse(f, 0, 0.12, 0.38, 0.38)], lines: [] }
-    case 'basin':
-      return { rings: [outline, ellipse(f, 0, 0.1, 0.38, 0.34), circle(f, 0, -0.36, short / 16)], lines: [] }
-    case 'shower':
-      return {
-        rings: [outline, circle(f, 0, 0, short / 16)],
-        lines: [
-          [point(f, -0.5, -0.5), point(f, 0.5, 0.5)],
-          [point(f, 0.5, -0.5), point(f, -0.5, 0.5)]
-        ]
-      }
-    case 'bath': {
-      const inset = short * 0.1
-      const iu = 0.5 - inset / f.width
-      const iv = 0.5 - inset / f.depth
-      return {
-        rings: [outline, roundedBox(f, -iu, -iv, iu, iv, short * 0.25), circle(f, -iu + (short * 0.15) / f.width, 0, short / 16)],
-        lines: []
-      }
-    }
-    case 'kitchen-run':
-      return { rings: [outline], lines: [] }
-  }
+export function itemSymbol(item: Item): ItemSymbol | null {
+  const definition = itemKindDefinition(item.kind)
+  return definition === undefined ? null : definition.symbol(penOf(frameOf(item)))
+}
+
+/**
+ * DXF (CNT-20): the symbol of an item in its own frame, as a block holds it: unturned, its middle
+ * at (0, 0), its back towards -Y. Null for a kind Grid does not hold.
+ */
+export function itemBlockSymbol(item: Item): ItemSymbol | null {
+  return itemSymbol({ ...item, at: [0, 0], turn: 0 })
 }
 
 // ── The floor it takes ───────────────────────────────────────────────────────────────────────
@@ -238,6 +201,8 @@ export function itemSymbol(item: Item & { readonly kind: ItemKind }): ItemSymbol
 export function itemFloorTaken(items: readonly Item[], rooms: readonly { readonly room: Room; readonly shape: RoomShape }[]): Map<string, number> {
   const byRoom = new Map<string, Item[]>()
   for (const item of items) {
+    // CNT-20: furniture can be moved, so it takes no floor.
+    if (!takesFloor(item.kind)) continue
     const room = itemRoom(item, rooms)
     if (room === null) continue
     const list = byRoom.get(room.id)
@@ -375,7 +340,8 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
   const floors = planFloors(plan)
   const floorIds = floors.map((f) => f.id)
   const floorHeights = new Map(floors.map((f) => [f.id, f.height] as const))
-  const kinds = joined(ITEM_KINDS.map(name), 'join.comma')
+  const kinds = joined(itemKinds().map(name), 'join.comma')
+  const ownLibrary = new Set((plan.library ?? []).map((entry) => entry.name))
 
   const sound: Item[] = []
   for (const item of items) {
@@ -471,5 +437,76 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
       )
     }
   }
+
+  // CNT-20: a library name that no entry has; the item is read from what it states itself.
+  const known = [...ownLibrary, ...BUILT_IN_NAMES]
+  for (const item of sound) {
+    if (item.library === undefined || ownLibrary.has(item.library) || builtInItem(item.library) !== undefined) continue
+    const meant = likelyId(item.library, known)
+    issues.push(
+      issue(
+        item.id,
+        'item/unknown-library',
+        meant === null
+          ? said('issue.item/unknown-library', { item: itemNounSaid(item), library: name(item.library) })
+          : said('issue.item/unknown-library.meant', { item: itemNounSaid(item), library: name(item.library), meant: name(meant) }),
+        'warning'
+      )
+    )
+  }
+
+  // CNT-20: items standing in each other, and the clear floor an item keeps in front of it.
+  const footprints = sound.map((item) => ({ item, footprint: itemFootprint(item), box: boundsOf(itemFootprint(item)) }))
+  for (let i = 0; i < footprints.length; i++) {
+    const a = footprints[i]!
+    for (let j = 0; j < i; j++) {
+      const b = footprints[j]!
+      if (floorOf(a.item) !== floorOf(b.item) || !meet(a.box, b.box)) continue
+      const depth = convexPenetration(a.footprint, b.footprint)
+      if (depth <= tolerance('itemOverlap')) continue
+      issues.push(hitIssue(a.item.id, 'item/overlap', said('issue.item/overlap', { item: itemNounSaid(a.item), other: itemNameSaid(b.item), depth: m(depth) }), [b.item.id]))
+    }
+  }
+  for (const { item } of footprints) {
+    if (!(item.clearance !== undefined && item.clearance > 0)) continue
+    const zone = itemClearanceZone(item)
+    const zoneBox = boundsOf(zone)
+    const walls = wallsRunInto(zone, wallsByFloor.get(floorOf(item)) ?? [])
+    const others = footprints.filter((o) => o.item.id !== item.id && floorOf(o.item) === floorOf(item) && meet(zoneBox, o.box) && convexPenetration(zone, o.footprint) > tolerance('itemOverlap'))
+    if (walls.length === 0 && others.length === 0) continue
+    const what = joined(
+      [...others.map((o) => itemNameSaid(o.item)), ...walls.map((w) => said('issue.item/clearance-blocked.wall', { wall: name(w.wall) }))],
+      'join.comma'
+    )
+    const hits = [...others.map((o) => o.item.id), ...walls.map((w) => w.wall)]
+    issues.push(hitIssue(item.id, 'item/clearance-blocked', said('issue.item/clearance-blocked', { item: itemNounSaid(item), clearance: m(item.clearance), what }), hits))
+  }
+
+  // CNT-20: each kind's own checks (the registry), on the items Grid can draw.
+  for (const item of sound) {
+    const definition = itemKindDefinition(item.kind)
+    if (definition?.check === undefined) continue
+    const room = itemRoom(item, rooms)
+    for (const found of definition.check(item, { plan, room })) {
+      const sentence = found.said ?? said('issue.item/kind-check', { words: found.message })
+      issues.push(withSaid({ entity: 'item', id: item.id, code: found.code, message: found.message, severity: found.severity }, sentence))
+    }
+  }
   return issues
+}
+
+const BUILT_IN_NAMES: readonly string[] = BUILT_IN_ITEMS.map((entry) => entry.name)
+
+const hitIssue = (id: string, code: string, sentence: Said, hits: readonly string[]): Issue =>
+  withSaid({ entity: 'item', id, code, message: english(sentence), severity: 'warning', hits }, sentence)
+
+/**
+ * CNT-20: the clear floor an item keeps in front of it (`clearance`): as wide as the item, from
+ * its front out by its clearance, counter-clockwise. Empty for an item that keeps none.
+ */
+export function itemClearanceZone(item: Item): Vec2[] {
+  if (!(item.clearance !== undefined && item.clearance > 0)) return []
+  const f = frameOf(item)
+  const out = 0.5 + item.clearance / f.depth
+  return [point(f, -0.5, 0.5), point(f, 0.5, 0.5), point(f, 0.5, out), point(f, -0.5, out)]
 }

@@ -91,6 +91,9 @@ import { PLACE_TEXT_MAX } from '@ongrid/floorplan/types/places'
 import { GROUP_COLOURS, HIGHLIGHT_COLOUR } from '@ongrid/viewer/src/picture/look'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { TAPED_OUTPUT, tapedTable } from '../taped/table'
+// CNT-20: the library grid_measure lists and fits by name.
+import { libraryAnswer, libraryBox, LIBRARY_RULE } from '../library/answer'
+import { libraryFor } from '../library/office'
 import {
   asRefusal,
   BOOLEAN,
@@ -1296,11 +1299,13 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so); what=sun gives "which rooms get the sun" as a table per room, of geometry and not a daylight result: each window wall\'s way and bearing, the window area against the floor area, and the room\'s depth from each window wall, square to it; what=site gives the plot: how far the building\'s outside face stands from each edge of the site\'s boundary against the set-back the person asked for ("1.00 m from the east boundary; you asked for 3.00 m"), how far each face is from the edge in front of it, and the plot coverage, the share of the plot the building covers; what=access gives the accessibility measurements, as numbers: for the rooms and routes the plan marks as needing to be accessible (accessible), or every room, each door\'s hole and clear width, each corridor at its narrowest, each room\'s turning space, and the way in from the entrance with every step on it and its height, set only against the person\'s own figures from the brief (grid_write_brief), each said as theirs, and what it did not look at. '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so); what=sun gives "which rooms get the sun" as a table per room, of geometry and not a daylight result: each window wall\'s way and bearing, the window area against the floor area, and the room\'s depth from each window wall, square to it; what=site gives the plot: how far the building\'s outside face stands from each edge of the site\'s boundary against the set-back the person asked for ("1.00 m from the east boundary; you asked for 3.00 m"), how far each face is from the edge in front of it, and the plot coverage, the share of the plot the building covers; what=access gives the accessibility measurements, as numbers: for the rooms and routes the plan marks as needing to be accessible (accessible), or every room, each door\'s hole and clear width, each corridor at its narrowest, each room\'s turning space, and the way in from the entrance with every step on it and its height, set only against the person\'s own figures from the brief (grid_write_brief), each said as theirs, and what it did not look at; what=library lists the library grid_place_item places from (CNT-20): each fixture\'s, piece of furniture\'s and typical room\'s name, size, height and the clear floor it keeps, from Grid\'s own sizes, the office\'s files in the library folder beside the plan and the plan\'s own, and with name one entry; what=fit with name instead of width and depth fits that entry, an item with the clear floor it keeps in front or a typical room, the same size every time. '
     + 'It measures the room between wall faces: what=fit, what=use and what=route with width keep clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas), for what a building code asks (grid_check), or to say a plan is accessible: what=access measures, it never says so. Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'sun', 'site', 'use', 'access'], description: 'What to measure: room, between, wall, fit, route, narrow, facing, sun, site, use or access.', examples: ['between', 'fit', 'route', 'use', 'access'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'sun', 'site', 'use', 'access', 'library'], description: 'What to measure: room, between, wall, fit, route, narrow, facing, sun, site, use, access or library.', examples: ['between', 'fit', 'route', 'use', 'access', 'library'] },
+    // CNT-20: a library entry, for fit and library.
+    name: { type: 'string', id: true, description: 'For fit, instead of width and depth: a library item or typical room by name (double-bed, bathroom). For library: one entry only.', examples: ['double-bed', 'double-bedroom'] },
     room: { type: 'string', id: true, description: 'For room, fit, use and route: the room id, where the route starts. For facing and sun: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
@@ -1318,14 +1323,14 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey, file } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'sun' | 'site' | 'use' | 'access'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'sun' | 'site' | 'use' | 'access' | 'library'
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
       room: ['room'],
       between: ['from', 'to', 'x', 'y'],
       wall: ['wall'],
-      fit: ['room', 'width', 'depth', 'diameter'],
+      fit: ['room', 'width', 'depth', 'diameter', 'name'],
       route: ['room', 'to', 'width'],
       narrow: ['under'],
       facing: ['room'],
@@ -1333,8 +1338,9 @@ const measureTool: GridTool = {
       site: [],
       use: ['room', 'width', 'diameter', 'clearance'],
       access: [],
+      library: ['name'],
     }
-    const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under', 'clearance'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
+    const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under', 'clearance', 'name'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`what=${what} takes ${allowed[what]!.length === 0 ? 'no other argument' : allowed[what]!.join(', ')}, not ${stray.join(', ')}.`)
     if (what === 'access') {
       // CNT-17: the accessibility measurements, set only against the person's own figures (the
@@ -1471,8 +1477,18 @@ const measureTool: GridTool = {
         data: { what, answer: w, rule: FACES_RULE },
       }
     }
+    if (what === 'library') {
+      // CNT-20: the library grid_place_item places from.
+      const { library, problems } = libraryFor(projectOf(context), file, survey.plan)
+      const found = libraryAnswer(library, problems, args['name'] as string | undefined)
+      return { text: [...found.lines, LIBRARY_RULE].join('\n'), data: { what, answer: found.data, rule: LIBRARY_RULE } }
+    }
     if (what === 'fit') {
       const room = roomOf()
+      // CNT-20: a library entry by name is a box of its own size, the same every time.
+      const named = args['name'] === undefined ? null : libraryBox(libraryFor(projectOf(context), file, survey.plan).library, args['name'] as string)
+      if (named !== null && (args['width'] !== undefined || args['depth'] !== undefined || args['diameter'] !== undefined)) throw new ToolRefusal('what=fit takes name, or width and depth, or diameter: one of them.')
+      if (named !== null) args = { ...args, width: named.width, depth: named.depth }
       const hasBox = args['width'] !== undefined || args['depth'] !== undefined
       if (hasBox === (args['diameter'] !== undefined)) throw new ToolRefusal('what=fit takes width and depth for a box, or diameter for a circle.')
       if (hasBox && (args['width'] === undefined || args['depth'] === undefined)) throw new ToolRefusal('A box needs both width and depth.')
@@ -1483,9 +1499,10 @@ const measureTool: GridTool = {
       const where = fit.at ? `, for example centred at (${m(fit.at.x)}, ${m(fit.at.y)})${fit.turned ? ', turned a quarter' : ''}` : ''
       const clear = fixtures.length === 0 ? '' : `, clear of its ${fixtures.length === 1 ? 'fixture' : `${fixtures.length} fixtures`} (${fixtures.map((f) => `${f.label} ${q(f.id)}`).join(', ')})`
       const rule = fixtures.length === 0 ? EMPTY_ROOM_RULE : `${FIT_CLEAR_RULE} ${EMPTY_ROOM_RULE}`
+      const entry = named === null ? '' : `${named.said} `
       return {
-        text: `${fit.what} ${fit.fits ? 'fits' : 'does not fit'} in ${q(room.facts.name)}${clear}${where}. The widest circle ${fixtures.length === 0 ? 'the room holds' : 'its free floor holds'} is ${L(fit.widestCircle)} across.\n${rule}`,
-        data: { what, answer: { room: room.facts.id, ...fit, ...(fixtures.length === 0 ? {} : { clearOf: fixtures.map((f) => f.id) }) }, rule },
+        text: `${entry}${fit.what} ${fit.fits ? 'fits' : 'does not fit'} in ${q(room.facts.name)}${clear}${where}. The widest circle ${fixtures.length === 0 ? 'the room holds' : 'its free floor holds'} is ${L(fit.widestCircle)} across.\n${rule}`,
+        data: { what, answer: { room: room.facts.id, ...fit, ...(fixtures.length === 0 ? {} : { clearOf: fixtures.map((f) => f.id) }), ...(named === null ? {} : { library: named.name }) }, rule },
       }
     }
     if (what === 'route') {

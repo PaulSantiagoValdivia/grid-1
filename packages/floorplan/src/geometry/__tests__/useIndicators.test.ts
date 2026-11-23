@@ -58,7 +58,7 @@ describe('a door swing that hits a fixture names it (S-8)', () => {
   })
 
   it('leaves out an item the plan does not hold, as the drawing does', () => {
-    const loose: Item = { ...table(), kind: 'table' }
+    const loose: Item = { ...table(), kind: 'piano' }
     expect(buildFloorPlan(room([loose])).items).toEqual([])
     expect(validateDoorSweeps(room([loose]), (o) => o)).toEqual([])
   })
@@ -66,7 +66,7 @@ describe('a door swing that hits a fixture names it (S-8)', () => {
   it('names an item inside a sentence by kind and id, with its label first when stated', () => {
     expect(itemName({ id: 'k1', kind: 'kitchen-run' })).toBe('kitchen run "k1"')
     expect(itemName({ id: 't2', kind: 'kitchen-run', label: 'Table 2' })).toBe('"Table 2" (kitchen run "t2")')
-    expect(itemName({ id: 'x', kind: 'sofa' })).toBe('item "x"')
+    expect(itemName({ id: 'x', kind: 'piano' })).toBe('item "x"')
   })
 })
 

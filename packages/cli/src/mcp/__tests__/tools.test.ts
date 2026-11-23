@@ -40,11 +40,12 @@ const ORDER = [
   'grid_stretch',
   'grid_rename_room',
   'grid_square_scan',
+  'grid_place_item',
   'grid_save_view',
 ]
 
 const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem'])
-const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_change_type', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan', 'grid_save_view'])
+const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_change_type', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan', 'grid_place_item', 'grid_save_view'])
 
 interface Listed {
   name: string
@@ -100,7 +101,9 @@ describe('tools/list', () => {
     // Apps lists for the page only (visibility app), never for the agent.
     // 32 since CNT-15: one named type changed, which every wall, door or window of it takes in the
     // same call (lab RT-22, CP2-3), no one opening's or room's change.
-    expect((await listed()).length).toBeLessThanOrEqual(32)
+    // 33 since CNT-20: a fixture, furniture or a typical room placed by its library name, so its
+    // size is the library's every time; the library itself is grid_measure what=library.
+    expect((await listed()).length).toBeLessThanOrEqual(33)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -223,6 +226,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },
     grid_rename_room: { room: 'bed2', name: 'Study', use: 'other', out: 'renamed.json' },
     grid_square_scan: { all: true, out: 'squared.json' },
+    grid_place_item: { name: 'double-bed', x: 2, y: 1.5, turn: 90, out: 'placed.json' },
     grid_save_view: { name: 'Garden corner', camera: { target: { room: null, point: [5, 4, 1] }, bearing: 135, tilt: 30, distance: 20, lens: { focalLength: 35 }, cut: null }, out: 'viewed.json' },
   }
 
@@ -275,7 +279,7 @@ describe('the tools on a two-bedroom flat', () => {
     const withFloor = GRID_TOOLS.filter((tool) => 'floor' in tool.args).map((tool) => tool.name)
     expect(withFloor.length).toBeGreaterThanOrEqual(6)
     for (const name of withFloor) {
-      const args = name === 'grid_stretch' ? { side: 'east', by: 0.3, floor: 'basement-99' } : name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : name === 'grid_sheet' ? { plan: 'plan.json', layout: 'drawing', floor: 'basement-99' } : { floor: 'basement-99' }
+      const args = name === 'grid_stretch' ? { side: 'east', by: 0.3, floor: 'basement-99' } : name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : name === 'grid_place_item' ? { name: 'wc', x: 1, y: 1, floor: 'basement-99' } : name === 'grid_sheet' ? { plan: 'plan.json', layout: 'drawing', floor: 'basement-99' } : { floor: 'basement-99' }
       const reply = await b.call(name, args)
       expect(reply.isError, name).toBe(true)
       expect(reply.text, name).not.toContain('basement-99')

@@ -598,6 +598,16 @@ export const TOLERANCES = {
       'Past it, the fixture is named with the wall it runs into.',
     basis: own
   },
+  // CNT-20: two items standing in each other, and the clear floor an item keeps.
+  itemOverlap: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'How far one item may reach into another, or into the clear floor another keeps in front of it, ' +
+      'and still stand against it. Past it, both are named.',
+    basis: own
+  },
   itemAboveRoom: {
     kind: 'tolerance',
     value: 0.001,

@@ -41,8 +41,8 @@ import { bayFootprint, planRamps, rampsOnFloor, soundBays } from './parking'
 import { gridsOn, planGrid, type PlanGrid } from './structuralGrid'
 import type { ColumnShape } from '../types/floorplan'
 import { statedOutline } from './massing'
-import type { ItemKind } from './items'
-import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
+import { itemBlockSymbol, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
+import { itemKindWord } from './itemKinds'
 import { planMarks } from './marks'
 import type { MarkedPart, OpeningKind, OpeningPart, Phase } from '../types/floorplan'
 import { statedKind } from './openingKinds'
@@ -158,10 +158,11 @@ export interface PlanOpening {
   readonly above?: true
 }
 
-/** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
+/** A fixture or a piece of furniture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
 export interface PlanItem {
   readonly id: string
-  readonly kind: ItemKind
+  /** Its kind, one the kinds registry holds (CNT-20: `itemKinds.ts`). */
+  readonly kind: string
   /** What it is called: its label, else its kind's word. */
   readonly label: string
   /** The room it stands in, or null. */
@@ -171,6 +172,16 @@ export interface PlanItem {
   /** Rings to fill with the paper and outline, in order, then lines over them (`itemSymbol`). */
   readonly rings: readonly (readonly Vec2[])[]
   readonly lines: readonly (readonly Vec2[])[]
+  /**
+   * CNT-20: where it stands and how it is turned, for a drawing that places one symbol many
+   * times (the DXF's blocks): its middle, its turn in degrees counter-clockwise, its width and
+   * depth, the library entry it was placed from, and its symbol in its own frame (`itemBlockSymbol`).
+   */
+  readonly at: Vec2
+  readonly turn: number
+  readonly size: readonly [number, number]
+  readonly library?: string
+  readonly block: { readonly rings: readonly (readonly Vec2[])[]; readonly lines: readonly (readonly Vec2[])[] }
   /** WRT-6: the plan marks the fixture, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
 }
@@ -580,18 +591,23 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   if ((plan.items ?? []).length > 0) {
     const shapes = roomShapes(index, broken)
     for (const item of plan.items ?? []) {
-      if (broken.has(item.id) || !isItemKind(item.kind)) continue
-      const kind = item.kind
+      const symbol = broken.has(item.id) ? null : itemSymbol(item)
+      const block = symbol === null ? null : itemBlockSymbol(item)
+      if (symbol === null || block === null) continue
       const outline = itemFootprint(item)
-      const symbol = itemSymbol({ ...item, kind })
       items.push({
         id: item.id,
-        kind,
-        label: item.label ?? ITEM_KIND_WORDS[kind],
+        kind: item.kind,
+        label: item.label ?? itemKindWord(item.kind),
         room: itemRoom(item, shapes)?.id ?? null,
         outline,
         rings: symbol.rings,
         lines: symbol.lines,
+        at: { x: item.at[0], y: item.at[1] },
+        turn: item.turn ?? 0,
+        size: item.size,
+        ...(item.library === undefined ? {} : { library: item.library }),
+        block,
         ...assumed('item', item.id)
       })
       extent.push(...outline)

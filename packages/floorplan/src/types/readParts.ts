@@ -38,6 +38,7 @@ import {
   FloorPlanSchema,
   FloorSchema,
   withTypes,
+  withLibrary,
   ItemSchema,
   OpeningPatternSchema,
   OpeningSchema,
@@ -461,7 +462,8 @@ export function readPlanParts(given: unknown, marks: readonly TextMark[] = []): 
   // WRT-7: a file that states its lengths in another unit is read in that unit, and in metres from here on.
   const converted = planInMetres(given)
   // CNT-15 (C24): every part filled from its type first, so a part read alone is read as it is meant.
-  const raw = withTypes(converted.raw) as Record<string, unknown>
+  // CNT-20 (C30): and every item from its library entry.
+  const raw = withLibrary(withTypes(converted.raw)) as Record<string, unknown>
   if (converted.from !== null) {
     faults.push({ kind: 'read-as-meant', part: null, path: ['units'], found: JSON.stringify(given['units']), wants: said('read.wants.metres'), read: said('read.read.converted', { unit: said(`read.unit.${converted.from}` as MessageKey) }) })
   }

@@ -21,7 +21,7 @@
  * knows. A refusal names the place and the limit, and never repeats the text (MSG-9).
  */
 import path from 'path'
-import { ITEM_KINDS, ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { FIXTURE_KINDS, ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import { FIRM_MEASURE_NAMES, FIRM_MEASURES, FIRM_ROOM_MEASURES, type FirmMeasure, type FirmStandard } from '@ongrid/rules'
 import { PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
@@ -123,7 +123,7 @@ function standard(raw: unknown, where: string): FirmStandard {
     name,
     note,
     uses: wordList(raw['uses'], `${where}.uses`, ROOM_USES, 'room uses'),
-    kinds: wordList(raw['kinds'], `${where}.kinds`, ITEM_KINDS, 'fixture kinds'),
+    kinds: wordList(raw['kinds'], `${where}.kinds`, FIXTURE_KINDS, 'fixture kinds'),
   }
 }
 

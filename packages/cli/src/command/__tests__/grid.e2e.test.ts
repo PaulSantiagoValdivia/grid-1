@@ -581,6 +581,9 @@ describe('the built file', () => {
     // curved walls too (main was 653,972 bytes) 660,801, again with no new dependency.
     // 750 kB since CNT-19: its parking bays and ramps (their checks, words in two languages, the
     // drawing and the take-off) on main at 739066d0 make it 700,870 bytes, with no new dependency.
+    // 750 kB since CNT-20: its library of sizes and typical rooms, the kinds registry, the place
+    // tool and their words in the message files take it to 711,450 bytes on main at ce236f72,
+    // again with no new dependency.
     expect(statSync(bundle).size).toBeLessThan(750_000)
   })
 })
