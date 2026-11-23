@@ -92,4 +92,18 @@ No expected figure of an existing test changed. New tests: `sheet/__tests__/draw
 
 ## Check results
 
-(Filled in after the final run.)
+On the branch with main at 739066d0 (CMD-4, CMD-14) merged in, on a machine shared with nine other
+sessions (load average 110 to 280):
+
+- `npm run typecheck`: passes. `npm run lint`: passes.
+- Full suite (`timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`):
+  383 files, 6,242 passed, 4 skipped, 1 failed: `grid.e2e.test.ts` "speed", `grid check` on the
+  sample flat in 594 ms against 500. Run alone it passes (1,868 ms for the test, the median under
+  500), twice. A timing failure, not this change: `grid check` loads none of the drawing's code.
+  An earlier full run, before the merge and the chunk fix, stopped at the 1,500 s limit; its
+  failures were the bundle cap and MS-19 (both fixed above) and five timing ones (5 s timeouts,
+  a 30 s limit), which passed when run on their own.
+- `npm run scoreboard`: the same as the stored figures. No count moves: rooms measured wrong 197,
+  damage that passes in silence 277, turns answered 23, design mistakes named 5, checks the plan
+  can feed 25, guards 735 and 95.
+- Bundle: `grid.mjs` 626,178 bytes (cap 700,000).
