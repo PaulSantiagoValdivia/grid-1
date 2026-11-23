@@ -13,7 +13,7 @@ import { indexPlan } from '../plan'
 import { floorOf } from '../floors'
 import { roomNesting, tryRoomShape } from '../room'
 import { roomZones } from '../zones'
-import type { FloorSpaces } from '../spaces'
+import type { FloorSpaces, Space } from '../spaces'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { planWallSides, wallBeyond } from '../exposure'
 import { flatOfRoom, planFlats } from '../flats'
@@ -147,7 +147,25 @@ export function openingSides(
  */
 export type OutsideTest = (wall: Wall, along: number, side: 'left' | 'right', asStated?: boolean) => boolean
 
+/**
+ * MSG-17: the enclosed floor no room claims past a wall's face, as the place of that piece among
+ * the floor's spaces, or `null` when that side is not enclosed (or the spaces cannot be worked out).
+ */
+export type EnclosedTest = (wall: Wall, along: number, side: 'left' | 'right') => number | null
+
+/** What lies past a wall's face with no room on it: the outside (`outside`), or which enclosed floor (`enclosedAt`). */
+export interface SideReader {
+  readonly outside: OutsideTest
+  readonly enclosedAt: EnclosedTest
+  /** The piece of enclosed floor `enclosedAt` gave, on the wall's floor. */
+  readonly piece: (wall: Wall, at: number) => Space | undefined
+}
+
 export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
+  return sideReader(plan, index).outside
+}
+
+export function sideReader(plan: FloorPlan, index: PlanIndex): SideReader {
   const spaces = new Map<string, FloorSpaces | null>()
   const spacesOf = (floor: string): FloorSpaces | null => {
     if (!spaces.has(floor)) {
@@ -156,22 +174,28 @@ export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
     }
     return spaces.get(floor) ?? null
   }
+  const enclosedAt: EnclosedTest = (wall, along, side) => {
+    const found = spacesOf(floorOf(wall))
+    if (found === null) return null
+    const axis = wallFrameAt(wall, along)
+    const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
+    const point = add(axis.point, scale(axis.normal, side === 'left' ? step : -step))
+    const at = found.spaces.findIndex((space) => {
+      const [outer, ...islands] = space.rings
+      return outer !== undefined && contains(outer, point) && !islands.some((ring) => contains(ring, point))
+    })
+    return at < 0 ? null : at
+  }
   // `asStated: false` asks only what lies there, for a door with no room on either side.
-  return (wall, along, side, asStated = true) => {
+  const outside: OutsideTest = (wall, along, side, asStated = true) => {
     if (asStated && wall.kind === 'exterior') return true
     // CNT-6 (C23): more of the building stated beyond the wall is not the outside.
     const beyond = wallBeyond(wall)
     if (beyond !== null) return beyond === 'outside'
-    const found = spacesOf(floorOf(wall))
-    if (found === null) return false
-    const axis = wallFrameAt(wall, along)
-    const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
-    const point = add(axis.point, scale(axis.normal, side === 'left' ? step : -step))
-    return !found.spaces.some((space) => {
-      const [outer, ...islands] = space.rings
-      return outer !== undefined && contains(outer, point) && !islands.some((ring) => contains(ring, point))
-    })
+    if (spacesOf(floorOf(wall)) === null) return false
+    return enclosedAt(wall, along, side) === null
   }
+  return { outside, enclosedAt, piece: (wall, at) => spacesOf(floorOf(wall))?.spaces[at] }
 }
 
 /** What keeps a person from passing a door or a doorless opening: a sill above the floor, too narrow, or too low. */
@@ -225,7 +249,10 @@ export interface FloorGraph {
   /** Every room that closes, by id. */
   readonly rooms: readonly string[]
   readonly links: readonly RouteLink[]
-  /** Doors and doorless openings to the outside: through a wall stated `exterior`, or with no room and no enclosed floor past it. */
+  /**
+   * Doors and doorless openings to the outside: through a wall stated `exterior`, or with no room
+   * and no enclosed floor past it. Never onto a courtyard closed in on every side (`closedCourts`, MSG-17).
+   */
   readonly exits: readonly OneSided[]
   /** Doors and doorless openings into enclosed floor that no room claims. */
   readonly undrawn: readonly OneSided[]
@@ -249,6 +276,12 @@ export interface FloorGraph {
    * is in `links`, `exits` or `undrawn`: a 5 cm hole is not a way out.
    */
   readonly tooSmall: readonly TooSmall[]
+  /**
+   * MSG-17 (lab CH-6): doors and doorless openings through a wall stated `exterior` onto outside
+   * floor the walls close in on every side, a courtyard or a light well no room claims, with no
+   * door from it to the open air. None of them is in `exits`: a way out must lead to open air.
+   */
+  readonly closedCourts: readonly OneSided[]
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -271,10 +304,13 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   const openEdges: OpenEdge[] = []
   const betweenHomes: RouteLink[] = []
   const tooSmall: TooSmall[] = []
+  const closedCourts: OneSided[] = []
   // CNT-6: which flat each room is in (CNT-4), so a home is never left through another.
   const flatOf = flatOfRoom(planFlats(plan))
 
-  const outside = outsideTest(plan, index)
+  const reader = sideReader(plan, index)
+  const outside = reader.outside
+  const leadsOut = courtWays(plan, index, outlines, reader)
   const passage = (wall: Wall, via: string, along: number, sides: [string | null, string | null]): void => {
     const [left, right] = sides
     if (left !== null && right !== null) {
@@ -302,7 +338,15 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
       return
     }
     // Outside as stated, or worked out: no room and no enclosed floor past that face (MSG-13).
-    if (beyond === 'outside' || outside(wall, along, left === null ? 'left' : 'right')) {
+    const side = left === null ? 'left' : 'right'
+    if (beyond === 'outside' || outside(wall, along, side)) {
+      // MSG-17 (lab CH-6): a wall stated exterior onto floor the walls close in, a courtyard no
+      // room claims, is a way out only when a door leads on from that courtyard to the open air.
+      const court = beyond === null && !edge && wall.kind === 'exterior' ? reader.enclosedAt(wall, along, side) : null
+      if (court !== null && !leadsOut(wall, court)) {
+        closedCourts.push({ room, opening: via })
+        return
+      }
       exits.push({ room, opening: via })
       if (edge) openEdges.push({ room, edge: via, beyond: 'outside' })
     } else if (edge) {
@@ -357,6 +401,77 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     betweenHomes: once(betweenHomes, (l) => `${l.rooms.join('|')}|${l.via}`).sort(
       (a, b) => byText(a.rooms[0], b.rooms[0]) || byText(a.rooms[1], b.rooms[1]) || byText(a.via, b.via)
     ),
-    tooSmall: tooSmall.sort((a, b) => byText(a.rooms[0]!, b.rooms[0]!) || byText(a.opening, b.opening))
+    tooSmall: tooSmall.sort((a, b) => byText(a.rooms[0]!, b.rooms[0]!) || byText(a.opening, b.opening)),
+    closedCourts: once(closedCourts, (u) => `${u.room}|${u.opening}`).sort(bySide)
+  }
+}
+
+/**
+ * MSG-17: whether a piece of enclosed floor no room claims (by its place among the floor's spaces)
+ * leads to the open air: through a door or doorless opening a person fits through, with no room on
+ * either side, from it to floor no wall encloses, or to another such piece that does. A gate in a
+ * courtyard wall, or a passage out to the street. Worked out once per piece, when first asked.
+ *
+ * A piece a room claims is that room's. A piece with a dividing line along its edge is open on that
+ * side, and one too narrow for a person to stand in (twice its area over its edge's length under
+ * `passableWidth`) is a gap between walls, not a courtyard: past any of them, a wall stated
+ * exterior faces outside, as before.
+ */
+function courtWays(
+  plan: FloorPlan,
+  index: PlanIndex,
+  outlines: ReadonlyMap<string, RoomOutline>,
+  reader: SideReader
+): (wall: Wall, court: number) => boolean {
+  const open = (piece: Space | undefined): boolean => {
+    // Floor a room claims, reached past a wall that room does not list, is that room's: as before.
+    if (piece === undefined || piece.rooms.length > 0) return true
+    if (piece.walls.some((id) => index.wallsById.get(id)?.virtual === true)) return true
+    const edge = piece.rings.reduce((sum, ring) => sum + ring.reduce((run, p, i) => run + Math.hypot(ring[(i + 1) % ring.length]!.x - p.x, ring[(i + 1) % ring.length]!.y - p.y), 0), 0)
+    return edge === 0 || underFigure((2 * piece.area) / edge, limit('passableWidth'), 'm')
+  }
+  let joins: Map<number, (number | 'out')[]> | null = null
+  const ways = (): Map<number, (number | 'out')[]> => {
+    if (joins !== null) return joins
+    joins = new Map()
+    for (const opening of plan.openings) {
+      if (opening.type === 'window' || shortOf(opening) !== null) continue
+      const wall = index.wallsById.get(opening.wall)
+      if (wall === undefined) continue
+      const [left, right] = openingSides(opening, index, outlines)
+      if (left !== null || right !== null) continue
+      const along = opening.offset + opening.width / 2
+      const beyond = wallBeyond(wall)
+      if (beyond === 'common' || beyond === 'neighbour') continue
+      const a = reader.enclosedAt(wall, along, 'left')
+      const b = reader.enclosedAt(wall, along, 'right')
+      const join = (from: number | null, to: number | null): void => {
+        if (from === null || from === to) return
+        joins!.set(from, [...(joins!.get(from) ?? []), to ?? 'out'])
+      }
+      join(a, b)
+      join(b, a)
+    }
+    return joins
+  }
+  const known = new Map<number, boolean>()
+  return (wall, court) => {
+    if (open(reader.piece(wall, court))) return true
+    const was = known.get(court)
+    if (was !== undefined) return was
+    const seen = new Set([court])
+    const queue = [court]
+    let out = false
+    while (queue.length > 0 && !out) {
+      for (const next of ways().get(queue.shift()!) ?? []) {
+        if (next === 'out') out = true
+        else if (!seen.has(next)) {
+          seen.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    for (const piece of seen) known.set(piece, out)
+    return out
   }
 }

@@ -302,7 +302,9 @@ describe('doors and walls round a hole (ARE-6)', () => {
     const graph = floorGraph(plan)
     expect(graph.rooms).toEqual(['ring'])
     expect(graph.links).toEqual([])
-    expect(graph.exits.map((e) => e.opening).sort()).toEqual(['front', 'yard'])
+    // MSG-17: the courtyard is closed in by the core on every side, so its door is no way out.
+    expect(graph.exits.map((e) => e.opening)).toEqual(['front'])
+    expect(graph.closedCourts).toEqual([{ room: 'ring', opening: 'yard' }])
   })
 
   it('does not report the core walls as standing in the gallery', () => {

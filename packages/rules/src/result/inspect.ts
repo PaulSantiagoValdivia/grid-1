@@ -68,6 +68,9 @@ const FINDING_CODES: Record<FindingCode, string> = {
   flat_without_front_door: 'flat/no-front-door',
   opening_below_ground: 'opening/below-ground',
   opening_too_small_to_pass: 'opening/too-small-to-pass',
+  // MSG-17: a way out leads to open air, and a let is left through common parts.
+  door_into_closed_court: 'opening/into-closed-court',
+  let_through_another_let: 'room/through-another-let',
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
@@ -492,7 +495,8 @@ function findingThing(finding: RuleFinding, wayOutNotDrawn: ReadonlySet<string>)
           finding.code === 'door_between_homes' ||
           finding.code === 'door_to_outside_above_ground' ||
           finding.code === 'opening_below_ground' ||
-          finding.code === 'opening_too_small_to_pass') &&
+          finding.code === 'opening_too_small_to_pass' ||
+          finding.code === 'door_into_closed_court') &&
         finding.openings[0] !== undefined
       ? { kind: 'opening', id: finding.openings[0] }
       : { kind: 'room', id: finding.rooms[0] ?? '' }
@@ -513,9 +517,16 @@ function findingSubject(finding: RuleFinding, names: Names, thing: Thing): Subje
   }
 }
 
+/**
+ * MSG-17: the kind of line a plan check's finding is. A door to the outside above the ground is
+ * listed as not checked: it is not taken as a way out, and where it leads (a balcony, an outside
+ * stair) is not looked at.
+ */
+const findingKind = (finding: RuleFinding): LineKind => (finding.code === 'door_to_outside_above_ground' ? 'not-checked' : 'finding')
+
 function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine {
   const { code, thing } = findingThing(finding, wayOutNotDrawn)
-  return line(code, 'finding', thing, finding.floor, findingSubject(finding, names, thing), finding.figures ? { figures: finding.figures } : {})
+  return line(code, findingKind(finding), thing, finding.floor, findingSubject(finding, names, thing), finding.figures ? { figures: finding.figures } : {})
 }
 
 /** MSG-5 (lab MS-14): the findings whose notes may stand as one line for several rooms. */
@@ -526,6 +537,7 @@ const GROUPED = new Set([
   'opening/to-undrawn-space',
   'opening/door-out-above-ground',
   'opening/too-small-to-pass',
+  'opening/into-closed-court',
   'room/too-small',
   'room/no-escape-opening',
   'room/escape-window-too-small',
@@ -563,7 +575,7 @@ function groupedFindings(findings: readonly RuleFinding[], names: Names, wayOutN
     const each = group.map((one) => one.line.thing)
     const also = [...new Set(group.flatMap((one) => [one.line.thing.id, ...one.line.also]))].filter((id) => id !== thing.id)
     const subject: Subject = { ...findingSubject(first.finding, names, thing), also, group: group.map((one) => findingSubject(one.finding, names, one.line.thing).name) }
-    return line(code, 'finding', thing, first.finding.floor, subject, { ...(first.line.figures ? { figures: first.line.figures } : {}), each })
+    return line(code, findingKind(first.finding), thing, first.finding.floor, subject, { ...(first.line.figures ? { figures: first.line.figures } : {}), each })
   })
 }
 

@@ -19,6 +19,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Flats and flat types](#flats-and-flat-types): `flat/unknown-room`, `flat/room-in-two`, `flat/unknown-type`, `flat/duplicate-id`, `flat/duplicate-type`, `flat/zone-without-room`
+- [A way out that leads somewhere, and rooms to let](#a-way-out-that-leads-somewhere-and-rooms-to-let): `opening/into-closed-court`, `room/through-another-let`, `opening/door-out-above-ground`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [A curved wall](#a-curved-wall): `wall/arc-ends-apart`, `wall/arc-too-tight`
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
@@ -167,7 +168,8 @@ A room may also say:
 | `tenure` | Who it is for: `private` (one household's or one tenant's own), `shared` (some households' or tenants', not all), `common` (the building's, for everyone in it, such as the stair or the bin store) or `commercial` (let or run as a business) |
 | `roomType` | The firm's own type for the room, as its room data sheets name it ("B2 double bedroom"), beside the fixed use. At most 120 characters, one line. Grid keeps it and reads nothing from it |
 
-No check reads `tenure` or `roomType` yet. Rooms text writes all of these: `building office`,
+One check reads `tenure`: a room to let is left through the common parts ([a way out that leads
+somewhere](#a-way-out-that-leads-somewhere-and-rooms-to-let)). No check reads `roomType`. Rooms text writes all of these: `building office`,
 `floor ground "Ground floor" building shop`, and `tenure common` and `type "B2"` on a room line
 ([rooms-first.md](rooms-first.md)).
 
@@ -717,6 +719,42 @@ so neighbours drawn for context add 0 m² (lab EL-17).
 
 All of these are optional and never defaulted, so a plan written before them reads exactly as
 before (version 1).
+
+## A way out that leads somewhere, and rooms to let
+
+A way out is a door or doorless opening a person fits through ([tolerances.md](tolerances.md),
+`passableWidth`) that leads to open air, on a floor at the ground (MSG-17). Two things that once
+counted no longer do:
+
+- **A courtyard closed in on every side.** A door through a wall stated `exterior` onto outside
+  floor that walls close in on every side, a courtyard or a light well no room claims, leads to
+  open air only if a door or doorless opening leads on from it, with no room on either side, to
+  floor no wall encloses: a gate or a passage to the street. Without one the door is not a way
+  out. Where it is why the floor has none, `opening/into-closed-court` names the door beside
+  `floor/no-exit`; beside a street door it says nothing, as a courtyard door. A courtyard drawn as
+  a room (an [outdoor space](#outdoor-space-roofed-or-open) or a room of no use) was read this way
+  already: a route leaves through it only by a door from it to the outside.
+- **A door to the outside above the ground** is not taken as a way out, and where it leads (a
+  balcony, a terrace, an outside stair) is not looked at: `opening/door-out-above-ground` is a
+  `not-checked` line. A way out from an upper floor is followed down a stair ([stairs that join two
+  floors](#stairs-that-join-two-floors)).
+
+**Rooms to let.** A let is a [flat](#flats-and-flat-types), or a room whose `tenure` is `private`
+in no flat when the plan marks some room `common` or `shared` (a house of rooms to let, student
+rooms, a hotel). Where nothing is common, the private rooms are one household's and nothing is
+asked. A let's way out goes through its own rooms and through rooms no let holds, up and down the
+stairs; when every way out of it passes through a room another let holds, `room/through-another-let`
+names the let and the rooms it goes through. A private bathroom, toilet, store or utility room in
+no flat is an en-suite: no let of its own, and no other let passes through it. A let no route
+reaches at all is said as before (`room/no-route-out`, `flat/no-front-door`).
+
+| Code | When |
+|---|---|
+| `opening/into-closed-court` | the floor's only way out is a door onto a courtyard closed in on every side |
+| `room/through-another-let` | every way out of a let passes through a room another let holds |
+| `opening/door-out-above-ground` (`not-checked`) | a door to the outside on a floor above the ground: not a way out, and where it leads is not looked at |
+
+These are checks on the drawing, from Grid's own reading of it, and cite no document.
 
 ## Outdoor space, roofed or open
 

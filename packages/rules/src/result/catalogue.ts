@@ -616,6 +616,13 @@ export const CODES = {
     }),
     variant: { found: (s) => (s.finding !== undefined && s.finding.elevation === undefined ? 'below' : '') }
   },
+  // MSG-17 (lab CH-6, AB-1): a way out leads to open air, and a let is left through common parts.
+  'opening/into-closed-court': {
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.doorIntoClosedCourt(s.name)) })
+  },
+  'room/through-another-let': {
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
+  },
   'opening/below-ground': {
     values: (s): Values => {
       const b = s.finding?.belowGround

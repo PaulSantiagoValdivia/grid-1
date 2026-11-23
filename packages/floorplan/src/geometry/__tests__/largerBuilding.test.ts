@@ -206,7 +206,7 @@ describe('CNT-6 a floor of a larger building (lab AC-7)', () => {
 
   it('does not take its doors out for ways out at the ground', () => {
     expect(summary(thirdFloor())).toEqual(['door_to_outside_above_ground hall front'])
-    expect(checkPlanSanity(thirdFloor()).findings[0]!.message).toBe('A door from "Hall" leads outside on a floor with more of the building below it, so it is not a way out')
+    expect(checkPlanSanity(thirdFloor()).findings[0]!.message).toBe('Where a door from "Hall" leads, on a floor with more of the building below it, was not checked: it is not taken as a way out')
   })
 })
 

@@ -271,10 +271,13 @@ describe('every line', () => {
       // The plan as read: a use in other capitals is read as its use (MSG-4).
       const report = checkLocalRules(FloorPlanSchema.parse(plan), options)
       const result = inspectPlan(plan, options)
-      const findings = result.lines.filter((l) => l.kind === 'finding')
+      // MSG-17: a door to the outside above the ground is one of the report's findings, listed as not checked.
+      const outAbove = (l: { code: string }): boolean => l.code === 'opening/door-out-above-ground'
+      const findings = result.lines.filter((l) => l.kind === 'finding' || outAbove(l))
       expect(findings.map((l) => l.message), name).toEqual(report.findings.map((f) => f.message))
+      expect(result.lines.filter(outAbove).every((l) => l.kind === 'not-checked'), name).toBe(true)
       // CNT-14: the doors with no swing stated come from the door check, not the report.
-      expect(result.lines.filter((l) => l.kind === 'not-checked' && l.code !== 'floor/not-checked-door-swings').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
+      expect(result.lines.filter((l) => l.kind === 'not-checked' && l.code !== 'floor/not-checked-door-swings' && !outAbove(l)).map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
       // The notes a person reads: the same wording, the names set apart instead of quoted.
       const notes = planNotes(FloorPlanSchema.parse(plan), report).notes
       expect(notes.map((n) => geometry.wordingText(n.title)), name).toEqual(findings.map((l) => l.message))
