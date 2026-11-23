@@ -72,7 +72,19 @@ viewer's 2D view says "the reference image is not part of this viewer yet".
 
 ## Checks
 
-See "Results" at the end, filled in after merging the latest `main`.
+After merging `main` at 739066d0 (CMD-4 and CMD-14 added only review notes and tests that touch
+none of these files):
+
+- `npm run typecheck` and `npm run lint`: clean.
+- The full suite (`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`) did not
+  finish in 1,500 s: the machine ran at a load average of 200 to 300 with nine other sessions.
+  It was run package by package with the same flags instead: `packages/floorplan` 146 files,
+  3,512 passed, 1 skipped; `packages/rules` 34 files, 449 passed; `packages/viewer` 69 files, 558
+  passed; `packages/cli` 116 files, 1,519 passed, 1 skipped, 1 failed; `scripts` and
+  `scoreboard` 20 files, 197 passed, 2 skipped. The one failure is the timing test "answers grid check on the sample
+  flat in under 500 ms" (median 1,052 ms during the run). Run on its own it passes; `grid check`
+  on the sample took about 350 ms at the time, and on a plan with no trace image this change adds
+  one `undefined` test to it.
 
 ## For the owner
 
@@ -114,4 +126,7 @@ Choices made for you; each is reversible.
 
 ## Scoreboard
 
-Filled in at the end.
+"Same as the stored figures": no count moves. Rooms measured wrong 197, damage that passes in
+silence 277, turns answered 23, design mistakes named 5, checks the plan can feed 25; the guards
+735 and 95. The trace image is in no measure or check, and no lab plan names one with a
+placement.
