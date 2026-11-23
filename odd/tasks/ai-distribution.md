@@ -3,9 +3,9 @@
 Source documents (outside git): `~/Downloads/Grid visibility in AI assistants (3).md` (16 Nov 2026,
 31 actions) and `~/Downloads/Roadmap × AI assistants.md` (18 Nov 2026, gaps and rethinks).
 
-Approval: the owner asked on 23 Nov 2026 to plan and orchestrate this work. Scope is branch-only.
+Approval: the owner approved this plan on 23 Nov 2026 (implementation, tests, review, PR and merge to `main`).
 `main` is public, so merging is publishing: nothing merges, publishes, deploys, lists or posts
-without the owner's explicit yes. Integration target: `main`, through a PR, after that yes.
+without the owner's explicit yes. Integration target: `main`, through a PR. Still gated on a separate yes: npm publish (CMD-8), deploys, the domain, listings and public posts.
 
 ## Status of the 31 actions on `main` (8fc50ec7, 23 Nov 2026)
 
