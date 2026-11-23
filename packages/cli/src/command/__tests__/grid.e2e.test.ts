@@ -579,6 +579,8 @@ describe('the built file', () => {
     // 700 kB since CNT-14 merged with CNT-18: its kinds of door and window (the symbols, the parts
     // in 3D and the IFC, the handing) with MSG-11's languages made 655,506 bytes, and with the
     // curved walls too (main was 653,972 bytes) 660,801, again with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(700_000)
+    // 750 kB since CMD-7: the guide for agents, which the tool server serves from the bundle, and
+    // the plan's JSON Schema writer take it to 717,520 bytes, with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(750_000)
   })
 })
