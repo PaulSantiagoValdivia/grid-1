@@ -54,6 +54,11 @@ Approval: the owner approved this plan on 23 Nov 2026 (implementation, tests, re
   running it needs the owner's accounts. Writer: primary.
 - [ ] 6. Close: update both source documents' status, list what waits on the owner. Primary.
 
+- [ ] 7. Owner move to `drafterz` (decided 23 Nov 2026): when the repository moves, change
+  `REPOSITORY` and `MCP_NAME` (`io.github.drafterz/grid`) in `distribution/listing.ts`, the README
+  and the tests that name `ongrid-arch` (9 files), in one commit. Must land before CMD-8: the MCP
+  Registry namespace and npm provenance both check the GitHub owner. Primary.
+
 ## Waiting on the owner
 
 CMD-8 (publish to npm, merge plugin files, MCP Registry), the domain, deploying the hosted
