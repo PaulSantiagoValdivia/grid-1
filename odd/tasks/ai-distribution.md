@@ -51,7 +51,7 @@ without the owner's explicit yes. Integration target: `main`, through a PR, afte
   "Use Grid in…" pages. Writer: agent B, worktree. Checks: links resolve, no claim of compliance.
 - [ ] 4. Docs services prep (#15): `context7.json` and a root `llms.txt` for the repository.
   Writer: agent B with task 3.
-- [ ] 5. Prompt panel (#9): `docs/measure/prompt-panel.md` with the 13 prompts and a log template;
+- [x] 5. Prompt panel (#9): `docs/measure/prompt-panel.md` with the 13 prompts and a log template;
   running it needs the owner's accounts. Writer: primary.
 - [ ] 6. Close: update both source documents' status, list what waits on the owner. Primary.
 
