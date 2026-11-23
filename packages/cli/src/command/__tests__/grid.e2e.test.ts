@@ -584,6 +584,8 @@ describe('the built file', () => {
     // 750 kB since CNT-20: its library of sizes and typical rooms, the kinds registry, the place
     // tool and their words in the message files take it to 711,450 bytes on main at ce236f72,
     // again with no new dependency.
+    // 750 kB since CMD-7: the guide for agents, which the tool server serves from the bundle, and
+    // the plan's JSON Schema writer take it to 717,520 bytes, with no new dependency.
     expect(statSync(bundle).size).toBeLessThan(750_000)
   })
 })

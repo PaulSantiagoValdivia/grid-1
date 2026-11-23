@@ -21,6 +21,7 @@ import { writeBriefTool } from './briefTool'
 import { diffTool, markStartTool } from './diffTools'
 import { labelled, readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
+import { guideResources } from '../guide/resources'
 import { EDIT_TOOLS } from './editTools'
 import { saveViewTool } from './viewTool'
 import { previewSyncTool, previewTool } from './previewTools'
@@ -95,5 +96,7 @@ export function projectResources(): ServerResource[] {
       },
       read: async () => ({ text: (await import('@ongrid/viewer/src/page/previewPage')).previewPageHtml(), _meta: { ui: { prefersBorder: true } } }),
     },
+    // CMD-7: the guide for agents and the plan's JSON Schema.
+    ...guideResources(),
   ]
 }

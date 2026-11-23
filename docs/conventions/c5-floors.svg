@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 260" width="520" height="260" font-family="Helvetica, Arial, sans-serif" font-size="13" role="img" aria-label="C5: floors share one origin and stack by level; level orders them and is never a height">
+  <title>C5: floors</title>
+  <rect width="520" height="260" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222"/></marker></defs>
+  <rect x="80" y="215" width="260" height="12" fill="#bdbdbd" stroke="#222"/>
+  <rect x="80" y="117" width="260" height="12" fill="#bdbdbd" stroke="#222"/>
+  <rect x="80" y="129" width="12" height="86" fill="#d9d9d9" stroke="#222"/>
+  <rect x="328" y="129" width="12" height="86" fill="#d9d9d9" stroke="#222"/>
+  <rect x="80" y="31" width="12" height="86" fill="#d9d9d9" stroke="#222"/>
+  <rect x="328" y="31" width="12" height="86" fill="#d9d9d9" stroke="#222"/>
+  <rect x="80" y="19" width="260" height="12" fill="#bdbdbd" stroke="#222"/>
+  <line x1="86" y1="10" x2="86" y2="245" stroke="#c0392b" stroke-dasharray="6 4"/>
+  <text x="86" y="258" text-anchor="middle" fill="#c0392b">x = 0 on every floor</text>
+  <text x="210" y="178" text-anchor="middle">"ground", level 0</text>
+  <text x="210" y="80" text-anchor="middle">"first", level 1</text>
+  <line x1="370" y1="215" x2="370" y2="117" stroke="#222" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="378" y="170">elevation of "first"</text>
+  <line x1="440" y1="129" x2="440" y2="31" stroke="#222" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="448" y="84">height</text>
+</svg>

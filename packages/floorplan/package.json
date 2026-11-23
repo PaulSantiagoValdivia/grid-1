@@ -15,6 +15,7 @@
     "./types/sheet": "./src/types/sheet.ts",
     "./types/units": "./src/types/units.ts",
     "./types/places": "./src/types/places.ts",
+    "./types/planSchema": "./src/types/planSchema.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
     "./messages": "./src/messages/index.ts",

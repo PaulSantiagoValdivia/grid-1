@@ -1,0 +1,679 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {
+      "id": "ground-ext-south",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        8,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-w-hall-west",
+      "start": [
+        4.4,
+        0
+      ],
+      "end": [
+        4.4,
+        8.4
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-w-kitchen-living",
+      "start": [
+        0,
+        4.8
+      ],
+      "end": [
+        4.4,
+        4.8
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-ext-west",
+      "start": [
+        0,
+        8.4
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-ext-north",
+      "start": [
+        8,
+        8.4
+      ],
+      "end": [
+        0,
+        8.4
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-w-hall-east",
+      "start": [
+        5.8,
+        0
+      ],
+      "end": [
+        5.8,
+        8.4
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-ext-east",
+      "start": [
+        8,
+        0
+      ],
+      "end": [
+        8,
+        8.4
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-w-wc-stair",
+      "start": [
+        5.8,
+        3.6
+      ],
+      "end": [
+        8,
+        3.6
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "ground"
+    },
+    {
+      "id": "ground-w-store-wc",
+      "start": [
+        5.8,
+        5.2
+      ],
+      "end": [
+        8,
+        5.2
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "ground"
+    },
+    {
+      "id": "first-ext-south",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        8,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "first-ext-east",
+      "start": [
+        8,
+        0
+      ],
+      "end": [
+        8,
+        8.4
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "first-w-bath-stair",
+      "start": [
+        5.8,
+        3.6
+      ],
+      "end": [
+        8,
+        3.6
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "first"
+    },
+    {
+      "id": "first-w-landing-east",
+      "start": [
+        5.8,
+        0
+      ],
+      "end": [
+        5.8,
+        8.4
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "first"
+    },
+    {
+      "id": "first-w-landing-west",
+      "start": [
+        4.4,
+        0
+      ],
+      "end": [
+        4.4,
+        8.4
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "first"
+    },
+    {
+      "id": "first-w-bed2-bed1",
+      "start": [
+        0,
+        4.8
+      ],
+      "end": [
+        4.4,
+        4.8
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "first"
+    },
+    {
+      "id": "first-ext-west",
+      "start": [
+        0,
+        8.4
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "first-ext-north",
+      "start": [
+        8,
+        8.4
+      ],
+      "end": [
+        0,
+        8.4
+      ],
+      "thickness": 0.3,
+      "height": 2.6,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "first-w-study-bath",
+      "start": [
+        5.8,
+        6.1
+      ],
+      "end": [
+        8,
+        6.1
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior",
+      "floor": "first"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "living",
+      "name": "Living room",
+      "boundary": [
+        "ground-ext-south",
+        "ground-w-hall-west",
+        "ground-w-kitchen-living",
+        "ground-ext-west"
+      ],
+      "floor": "ground",
+      "use": "living"
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen and dining",
+      "boundary": [
+        "ground-w-kitchen-living",
+        "ground-w-hall-west",
+        "ground-ext-north",
+        "ground-ext-west"
+      ],
+      "floor": "ground",
+      "use": "kitchen"
+    },
+    {
+      "id": "hall",
+      "name": "Hall",
+      "boundary": [
+        "ground-ext-south",
+        "ground-w-hall-east",
+        "ground-ext-north",
+        "ground-w-hall-west"
+      ],
+      "floor": "ground",
+      "use": "corridor"
+    },
+    {
+      "id": "ground-stair",
+      "name": "Stair",
+      "boundary": [
+        "ground-ext-south",
+        "ground-ext-east",
+        "ground-w-wc-stair",
+        "ground-w-hall-east"
+      ],
+      "floor": "ground",
+      "use": "stair"
+    },
+    {
+      "id": "wc",
+      "name": "WC",
+      "boundary": [
+        "ground-w-wc-stair",
+        "ground-ext-east",
+        "ground-w-store-wc",
+        "ground-w-hall-east"
+      ],
+      "floor": "ground",
+      "use": "toilet"
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "boundary": [
+        "ground-w-store-wc",
+        "ground-ext-east",
+        "ground-ext-north",
+        "ground-w-hall-east"
+      ],
+      "floor": "ground",
+      "use": "storage"
+    },
+    {
+      "id": "first-stair",
+      "name": "Stair",
+      "boundary": [
+        "first-ext-south",
+        "first-ext-east",
+        "first-w-bath-stair",
+        "first-w-landing-east"
+      ],
+      "floor": "first",
+      "use": "stair"
+    },
+    {
+      "id": "bed1",
+      "name": "Bedroom 1",
+      "boundary": [
+        "first-ext-south",
+        "first-w-landing-west",
+        "first-w-bed2-bed1",
+        "first-ext-west"
+      ],
+      "floor": "first",
+      "use": "bedroom"
+    },
+    {
+      "id": "bed2",
+      "name": "Bedroom 2",
+      "boundary": [
+        "first-w-bed2-bed1",
+        "first-w-landing-west",
+        "first-ext-north",
+        "first-ext-west"
+      ],
+      "floor": "first",
+      "use": "bedroom"
+    },
+    {
+      "id": "landing",
+      "name": "Landing",
+      "boundary": [
+        "first-ext-south",
+        "first-w-landing-east",
+        "first-ext-north",
+        "first-w-landing-west"
+      ],
+      "floor": "first",
+      "use": "corridor"
+    },
+    {
+      "id": "bath",
+      "name": "Bathroom",
+      "boundary": [
+        "first-w-bath-stair",
+        "first-ext-east",
+        "first-w-study-bath",
+        "first-w-landing-east"
+      ],
+      "floor": "first",
+      "use": "bathroom"
+    },
+    {
+      "id": "study",
+      "name": "Study",
+      "boundary": [
+        "first-w-study-bath",
+        "first-ext-east",
+        "first-ext-north",
+        "first-w-landing-east"
+      ],
+      "floor": "first",
+      "use": "study"
+    }
+  ],
+  "openings": [
+    {
+      "id": "front",
+      "wall": "ground-ext-south",
+      "type": "door",
+      "offset": 4.65,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "d-living",
+      "wall": "ground-w-hall-west",
+      "type": "door",
+      "offset": 0.65,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "d-kitchen",
+      "wall": "ground-w-hall-west",
+      "type": "door",
+      "offset": 6.95,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "end",
+      "swing": "left"
+    },
+    {
+      "id": "o-stair",
+      "wall": "ground-w-hall-east",
+      "type": "opening",
+      "offset": 0.45,
+      "width": 1,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d-wc",
+      "wall": "ground-w-hall-east",
+      "type": "door",
+      "offset": 3.95,
+      "width": 0.7,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "right"
+    },
+    {
+      "id": "d-store",
+      "wall": "ground-w-hall-east",
+      "type": "door",
+      "offset": 5.55,
+      "width": 0.7,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "right"
+    },
+    {
+      "id": "back",
+      "wall": "ground-ext-west",
+      "type": "door",
+      "offset": 0.75,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "w-living",
+      "wall": "ground-ext-south",
+      "type": "window",
+      "offset": 1.35,
+      "width": 1.8,
+      "sill": 0.6,
+      "height": 1.5
+    },
+    {
+      "id": "w-living2",
+      "wall": "ground-ext-west",
+      "type": "window",
+      "offset": 5.45,
+      "width": 1.2,
+      "sill": 0.9,
+      "height": 1.3
+    },
+    {
+      "id": "w-kitchen",
+      "wall": "ground-ext-north",
+      "type": "window",
+      "offset": 4.95,
+      "width": 1.6,
+      "sill": 1,
+      "height": 1.1
+    },
+    {
+      "id": "w-wc",
+      "wall": "ground-ext-east",
+      "type": "window",
+      "offset": 4.15,
+      "width": 0.5,
+      "sill": 1.4,
+      "height": 0.7
+    },
+    {
+      "id": "o-stair-up",
+      "wall": "first-w-landing-east",
+      "type": "opening",
+      "offset": 0.45,
+      "width": 1,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d-bed1",
+      "wall": "first-w-landing-west",
+      "type": "door",
+      "offset": 0.65,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "d-bed2",
+      "wall": "first-w-landing-west",
+      "type": "door",
+      "offset": 6.95,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "end",
+      "swing": "left"
+    },
+    {
+      "id": "d-bath",
+      "wall": "first-w-landing-east",
+      "type": "door",
+      "offset": 3.95,
+      "width": 0.7,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "right"
+    },
+    {
+      "id": "d-study",
+      "wall": "first-w-landing-east",
+      "type": "door",
+      "offset": 7.15,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "end",
+      "swing": "right"
+    },
+    {
+      "id": "w-bed1",
+      "wall": "first-ext-south",
+      "type": "window",
+      "offset": 1.35,
+      "width": 1.6,
+      "sill": 0.9,
+      "height": 1.3
+    },
+    {
+      "id": "w-bed2",
+      "wall": "first-ext-north",
+      "type": "window",
+      "offset": 5.15,
+      "width": 1.4,
+      "sill": 0.9,
+      "height": 1.3
+    },
+    {
+      "id": "w-bath",
+      "wall": "first-ext-east",
+      "type": "window",
+      "offset": 4.55,
+      "width": 0.6,
+      "sill": 1.4,
+      "height": 0.7
+    },
+    {
+      "id": "w-study",
+      "wall": "first-ext-north",
+      "type": "window",
+      "offset": 0.65,
+      "width": 1,
+      "sill": 0.9,
+      "height": 1.3
+    }
+  ],
+  "written": {
+    "from": "rooms",
+    "revision": "0aede94cf2b766ee",
+    "boundaries": {
+      "living": "782dbed4",
+      "kitchen": "d0da1f4e",
+      "hall": "d6cd1a53",
+      "ground-stair": "38546c22",
+      "wc": "8b3fc3fb",
+      "store": "f9e83396",
+      "first-stair": "833073b9",
+      "bed1": "eb551bd6",
+      "bed2": "03c27c12",
+      "landing": "7c1cbe2b",
+      "bath": "851aad67",
+      "study": "19b0668b"
+    }
+  },
+  "site": {
+    "country": "US",
+    "ground": -0.15,
+    "boundary": [
+      [
+        -3,
+        -6
+      ],
+      [
+        11,
+        -6
+      ],
+      [
+        11,
+        12.4
+      ],
+      [
+        -3,
+        12.4
+      ]
+    ],
+    "streets": [
+      1
+    ]
+  },
+  "floors": [
+    {
+      "id": "ground",
+      "name": "Ground floor",
+      "level": 0
+    },
+    {
+      "id": "first",
+      "name": "First floor",
+      "level": 1
+    }
+  ]
+}

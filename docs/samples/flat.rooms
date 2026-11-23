@@ -1,0 +1,33 @@
+# A two-bedroom flat on the ground floor of a small block, with the block's entrance hall and
+# stair, which the flat's front door opens onto.
+# The plan file beside this one adds what rooms text has no words for: the site, with its
+# plot, its ground level and its place, the United States, whose model codes are the only
+# figures Grid applies today. Write it again with: grid write flat.rooms --plan flat.json
+plan "Ground-floor flat"
+walls outside 0.3 inside 0.1 height 2.6
+windows sill 0.9 height 1.3
+
+room living  "Living room"   living   4.4 x 4.2  at 0.15,0.15
+room kitchen "Kitchen"       kitchen  4.4 x 3.0  north of living
+room bed1    "Bedroom 1"     bedroom  4.4 x 3.1  east of living
+room hall    "Hall"          corridor 1.3 x *    north of bed1 until kitchen
+room bath    "Bathroom"      bathroom *   x 1.6  east of hall until bed1
+room bed2    "Bedroom 2"     bedroom  3.0 x *    north of bath until hall
+room entry   "Entrance hall" corridor * x 1.6    north of kitchen until bed2 tenure common
+room stair   "Stair"         stair    2.4 x 1.6  east of entry tenure common
+
+door front      in entry north, 0.6 from west, 1.0 wide, opens in, hinged west
+door flat-door  between entry and hall, centred, 0.9 wide, opens into hall, hinged east
+door d-living   between hall and living, 0.1 from south, 0.8 wide, opens into living, hinged south
+door d-kitchen  between hall and kitchen, 0.55 from south of kitchen, 0.8 wide, opens into kitchen, hinged south
+door d-bed1     between hall and bed1, 0.25 from west, 0.8 wide, opens into bed1, hinged west
+door d-bath     between hall and bath, 0.45 from south, 0.7 wide, opens into bath, hinged south
+door d-bed2     between hall and bed2, 0.25 from south of bed2, 0.8 wide, opens into bed2, hinged south
+opening d-stair between entry and stair, centred, 1.0 wide
+opening pass    between kitchen and living, 1.35 from west, 1.2 wide
+window w-living in living south, 1.05 from west, 1.8 wide, sill 0.6, height 1.5
+window w-living-west in living west, 1.35 from south, 1.4 wide
+window w-kitchen in kitchen west, 0.95 from south, 1.2 wide, sill 1.0, height 1.1
+window w-bed1   in bed1 south, 1.55 from west, 1.4 wide
+window w-bath   in bath east, 0.45 from south, 0.6 wide, sill 1.4, height 0.7
+window w-bed2   in bed2 east, 0.65 from south, 1.2 wide

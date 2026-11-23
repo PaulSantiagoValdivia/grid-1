@@ -46,6 +46,20 @@ const result = await build({
 // Runnable as ./dist/grid.mjs too. npm sets this itself when it links the bin.
 chmodSync(here('./dist/grid.mjs'), 0o755)
 
+// CMD-7: the plan's structure as a JSON Schema, worked out from the code on every build, beside
+// grid.mjs and in the package.
+const schemaBuild = await build({
+  stdin: { contents: "export { planJsonSchema } from '@ongrid/floorplan/types/planSchema'\n", resolveDir: here('.'), loader: 'ts' },
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  logLevel: 'warning',
+})
+const schemaModule = await import(`data:text/javascript;base64,${Buffer.from(schemaBuild.outputFiles[0].text).toString('base64')}`)
+writeFileSync(here('./dist/plan.schema.json'), `${JSON.stringify(schemaModule.planJsonSchema(), null, 2)}\n`)
+
 // The sheet's fonts (VEW-7), read by the canvas beside grid.mjs.
 cpSync(here('./fonts'), here('./dist/fonts'), { recursive: true })
 

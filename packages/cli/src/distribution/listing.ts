@@ -26,7 +26,7 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { RETELLING_RULE } from '../mcp/retelling'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
-import { ROOM_NAMES_TRAVEL, UNITS_RULE } from '../mcp/protocol'
+import { FIRST_QUESTIONS, GUIDE_AND_SCHEMA, LABEL_AND_RETELLING, ROOM_NAMES_TRAVEL, ROOMS_FIRST, SOURCE_OF_TRUTH, UNITS_RULE } from '../guide/paragraphs'
 
 /** The npm package, and the command `npx` runs from it. */
 export const PACKAGE_NAME = 'ongrid'
@@ -67,7 +67,8 @@ export function packageManifest(version: string): Record<string, unknown> {
     license: LICENSE,
     type: 'module',
     bin: { grid: 'grid.mjs', ongrid: 'grid.mjs' },
-    files: ['grid.mjs', 'chunks/', 'fonts/', 'README.md', 'LICENSE', 'NOTICE'],
+    // CMD-7: the guide for agents and the plan's JSON Schema travel with the command.
+    files: ['grid.mjs', 'chunks/', 'fonts/', 'guide.md', 'plan.schema.json', 'README.md', 'LICENSE', 'NOTICE'],
     engines: { node: '>=22' },
     mcpName: MCP_NAME,
     repository: { type: 'git', url: `git+${REPOSITORY}.git`, directory: 'packages/cli' },
@@ -86,6 +87,8 @@ export function packageReadme(): string {
     `${DESCRIPTION} The \`grid\` and \`ongrid\` commands do the same thing.`,
     '',
     `Start the tool server for an agent with \`${ONE_LINE}\`. Run \`grid --help\` for the commands.`,
+    '',
+    'Before writing a first plan, an agent reads `guide.md`, the guide for agents (the tool server serves it as `grid://guide`). `plan.schema.json` is the plan file\'s structure as a JSON Schema (`grid://schema/plan`).',
     '',
     `Every report is labelled "${GENERAL_GUIDANCE_LABEL}".`,
     '',
@@ -140,10 +143,7 @@ function skill(): string {
     '5. Before the first room, write the brief from the person\'s own words with `grid_write_brief`:',
     '   each wish with its level and whether they gave it or you assumed it. Every change then',
     '   says which lines are met and which missed; a line met never means a plan is allowed.',
-    '   Write a plan rooms first, the main way to write one: `grid_write_rooms` takes the rooms',
-    '   with their sizes and neighbours and works out the walls. The plan file is the source of',
-    '   truth: to change a plan, read it back with `grid_describe` as=rooms, change the text and',
-    '   write it again. For one sentence of request, one change: `grid_change_opening`,',
+    '   Then write the plan rooms first, as below. For one sentence of request, one change: `grid_change_opening`,',
     '   `grid_move_room_side`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`,',
     '   `grid_stretch`, `grid_rename_room` or `grid_mirror`; each says what it changed, what it',
     '   guessed and what it could not keep. Change the plan only when asked.',
@@ -154,12 +154,20 @@ function skill(): string {
     '6. When a Grid tool\'s answer looks wrong, `grid_report_problem` drafts an issue about it.',
     '   Grid sends nothing: show the person the draft and let them decide whether to file it.',
     '',
+    // CMD-7: the paragraphs the server's instructions, the guide and the README carry too.
+    ROOMS_FIRST,
+    '',
+    SOURCE_OF_TRUTH,
+    '',
+    FIRST_QUESTIONS,
+    '',
+    GUIDE_AND_SCHEMA,
+    '',
     ROOM_NAMES_TRAVEL,
     '',
     UNITS_RULE,
     '',
-    `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`,
-    RETELLING_RULE,
+    LABEL_AND_RETELLING,
     '',
   ].join('\n')
 }

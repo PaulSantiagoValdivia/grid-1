@@ -75,7 +75,9 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 - A room's name and its id go into every export and sheet, and travel with the plan file: name
   a room for what it is, never for a person. Who sits where is kept in a file of its own
   ([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
-- The full language is in the header of `packages/floorplan/src/rooms/compile.ts`.
+- The full language is in the header of `packages/floorplan/src/rooms/compile.ts`. The
+  [guide for agents](agent-guide.md) has it in short, with what agents ask first, and
+  [samples/](samples/) three whole plans written this way.
 
 ## Many of one room, floors copied, and walls through floors
 

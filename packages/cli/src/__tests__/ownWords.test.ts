@@ -59,7 +59,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/describe/card.ts': [13, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
   'packages/cli/src/describe/walk.ts': [4, 'agentForm'],
-  'packages/cli/src/distribution/listing.ts': [84, 'developer'],
+  // CMD-7: three of its skill's paragraphs are in guide/paragraphs.ts now.
+  'packages/cli/src/distribution/listing.ts': [81, 'developer'],
   'packages/cli/src/distribution/zip.ts': [1, 'developer'],
   'packages/cli/src/draw/cameraAsk.ts': [12, 'agent'],
   'packages/cli/src/draw/canvas.ts': [1, 'developer'],
@@ -84,13 +85,18 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/library/answer.ts': [9, 'notYet'],
   'packages/cli/src/library/office.ts': [6, 'notYet'],
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
+  // CMD-7: the guide for agents, its shared paragraphs and its two resources, written for the agent.
+  'packages/cli/src/guide/guide.ts': [98, 'agent'],
+  'packages/cli/src/guide/paragraphs.ts': [16, 'agent'],
+  'packages/cli/src/guide/resources.ts': [3, 'agent'],
   'packages/cli/src/mcp/briefTool.ts': [44, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [84, 'tools'],
   // ARE-14: grid_areas' outdoor_rules argument, its schema and its checks.
   'packages/cli/src/mcp/outdoorRulesArg.ts': [12, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
-  'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
+  // CMD-7: its instructions' paragraphs are in guide/paragraphs.ts now.
+  'packages/cli/src/mcp/protocol.ts': [14, 'agent'],
   // ARE-14: one more, grid_areas' description of the party walls, free floor and outdoor_rules.
   // CNT-19: one more, grid_takeoff's description of the parking bays and the ramps.
   // CNT-20: two more, the place tool and the library in the tools' descriptions.
@@ -182,6 +188,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
   'packages/floorplan/src/types/floorplan.ts': [60, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
+  // CMD-7: the plan JSON Schema's title, its description, and the error for a schema part it cannot write.
+  'packages/floorplan/src/types/planSchema.ts': [3, 'developer'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
   'packages/floorplan/src/types/units.ts': [7, 'notYet'],
