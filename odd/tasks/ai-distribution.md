@@ -44,11 +44,11 @@ Approval: the owner approved this plan on 23 Nov 2026 (implementation, tests, re
   host. Writer: agent A, worktree. Checks: typecheck, lint, test.
 - [ ] 2. MCP Apps viewer (#19): a `ui://` resource that shows the plan from the existing viewer,
   served by the same server, no third-party frames. Writer: agent A after task 1.
-- [ ] 3. Site drafts (#5, #8, #6 Spanish, #23, #24): `site/` with robots.txt, sitemap.xml,
+- [x] 3. Site drafts (#5, #8, #6 Spanish, #23, #24): `site/` with robots.txt, sitemap.xml,
   llms.txt, llms-full.txt, OG and JSON-LD in an index page, privacy policy, support page, Spanish
   landing and quick-start (neutral Spanish, both "dormitorio/recámara"), comparison pages, and
   "Use Grid in…" pages. Writer: agent B, worktree. Checks: links resolve, no claim of compliance.
-- [ ] 4. Docs services prep (#15): `context7.json` and a root `llms.txt` for the repository.
+- [x] 4. Docs services prep (#15): `context7.json` and a root `llms.txt` for the repository.
   Writer: agent B with task 3.
 - [x] 5. Prompt panel (#9): `docs/measure/prompt-panel.md` with the 13 prompts and a log template;
   running it needs the owner's accounts. Writer: primary.
