@@ -61,6 +61,23 @@ No changelog fragment: nothing people use or a tool answers changes. No conventi
 
 None moved: 197, 277, 23, 5, 25; guards 735 and 95. Same as `scoreboard/current.json`.
 
+## Check results
+
+Run on this branch after merging `main` at `739066d0`, on a Mac with ten sessions running (load
+average 200 to 300).
+
+- `npm run typecheck`, `npm run lint`: pass. `npm run scoreboard`: pass, 124 s, same as stored.
+- The scoreboard, data scan, CI workflow and T-9 safety tests: 55 of 55 pass.
+- The full suite (`timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2`) did not
+  finish inside 25 minutes under that load, so it was run in three parts. Every file passed
+  except two that check time on the clock:
+  - `grid preview (VEW-4)` (two tests): failed in the full run, 5 of 5 pass on their own.
+  - `diff-size.test.ts`, "diffs 1,000 entities ... well inside a second": took 55 s at load
+    about 300 and failed again alone at load 200. It is a wall-clock bound in
+    `packages/floorplan`, which this branch does not touch.
+- After the merge: `grid.e2e.test.ts` (CMD-4's tests) 98 of 98 and `ci-workflow.test.ts` 12 of
+  12 pass.
+
 ## For the owner
 
 - **10 minutes, not 15, for the scoreboard step in CI.** The card says 10; QAR-4 gave it 15
