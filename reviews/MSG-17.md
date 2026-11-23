@@ -105,4 +105,17 @@ private to a group or common, already existed as CNT-5's `tenure`; the groups ar
 
 ## Checks run
 
-To be filled in after the final merge of `main`.
+After merging `main` at 739066d0 (CMD-4, CMD-14), on a machine with load averages of 60 to 270:
+
+- `npm run typecheck`, `npm run lint`, `npm run build`: passed.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 384 files, 6,219 passed,
+  4 skipped. Two earlier runs hit the 1,500 s timeout under load; the timing guards that failed in
+  them (`answers grid check on the sample flat in under 500 ms`, `stop looking for hosts after
+  MAX_HOST_CUTS pairs`, the `grid diff` tools' three-colour picture) pass run alone. One real
+  failure found on the way, `ownWords.test.ts` counting a new literal in `tolerances.ts`, was fixed
+  (c0fbf979).
+- `npm run scoreboard` (before the merge; the merge touched no source): the same as the stored
+  figures, so no count moved and `scoreboard/current.json` is unchanged. Rooms measured wrong 197,
+  damage that passes in silence 277, turns answered 23, design mistakes named 5, checks the plan
+  can feed 25; guards 735 and 95. No damaged plan in the set turns on a closed courtyard or a let,
+  and the door above the ground is still a report finding, so "mistakes named" is unchanged.
