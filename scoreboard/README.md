@@ -89,15 +89,19 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after SHT-2) | The lab's own figure |
-|---|---:|---:|---:|
-| Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 386 | baseline 560 |
-| Turns answered | 15 | 15 | 15 |
-| Design mistakes named | 2 | 2 | 2 |
-| Checks the plan can feed | 5 | 5 | 5 |
-| Guard: rooms Grid does not measure | 1,284 | 724 | – |
-| Guard: sound plans with a warning | 70 | 95 | 70 |
+| Count | Baseline (76caeb8) | The lab's own figure |
+|---|---:|---:|
+| Rooms measured wrong | 1,975 | baseline 829 + 1,145 = 1,974 |
+| Damage that passes in silence | 560 | baseline 560 |
+| Turns answered | 15 | 15 |
+| Design mistakes named | 2 | 2 |
+| Checks the plan can feed | 5 | 5 |
+| Guard: rooms Grid does not measure | 1,284 | – |
+| Guard: sound plans with a warning | 70 | 70 |
+
+The figures now are the ones stored in `current.json`, which `npm run scoreboard` prints beside
+the baseline. They are not copied here, because every merge that moves a count would leave a
+copy behind.
 
 The baseline is commit `76caeb8`, the roadmap's reference point from before the week's work.
 It was built and run once in a temporary `git worktree` outside the repository, with this same

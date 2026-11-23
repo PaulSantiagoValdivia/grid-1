@@ -51,6 +51,6 @@ jobs:
       # The lab data in scoreboard/ holds no machine paths and no personal data.
       - run: npm run check:data
       # The five counts of scoreboard/README.md. Fails when any count is worse than the
-      # figures stored in scoreboard/current.json.
+      # figures stored in scoreboard/current.json. QAR-1 asks for the run within 10 minutes.
       - run: npm run scoreboard
-        timeout-minutes: 15
+        timeout-minutes: 10
