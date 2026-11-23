@@ -79,6 +79,9 @@ seven columns and the ramp stated with `slope: 16.7`.
   sentence in `grid_takeoff`'s description) and `geometry/tolerances.ts` 255 → 259 (`developer`:
   what the two new entries decide), each with a comment naming CNT-19. The schema's two new
   refusals are in the message files (`read.bay.blankNumber`, `read.ramp.tooManyPoints`).
+- `packages/cli/src/command/__tests__/grid.e2e.test.ts`: the built file's size cap 700 kB → 750 kB.
+  Merged with main at 739066d0 the file is 700,870 bytes, with no new dependency; the comment says
+  so, as each earlier raise did.
 
 ## Scoreboard
 
