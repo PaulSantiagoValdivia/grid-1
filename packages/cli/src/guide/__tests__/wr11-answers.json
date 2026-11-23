@@ -1,0 +1,17 @@
+{
+  "run": {
+    "guide": "docs/agent-guide.md",
+    "date": "2026-11-23",
+    "agent": "a fresh Claude Haiku subagent with no other context",
+    "rule": "read only the guide, open no other file, run no command, answer from the page alone",
+    "questions": "WR11_QUESTIONS in wr11.ts, asked word for word"
+  },
+  "answers": {
+    "stair": "Draw the stair as a room with use `stair` on every floor it joins, in the same place, with an opening or door from the hall or landing on each floor. Put `through first` on the room line to write it once and stand it on every floor from its own up to `first`. The flight itself (treads, width, walking line) is optional and goes in the plan file's `stairs` list, not in rooms text. The guide's example uses floors `ground` (level 0) and `first` (level 1).",
+    "office": "Give it the use `office`, and keep the person's own word in the name, for example `room office \"My office\" office 3.0 x 3.0 ...`. The guide reads `office` as the use, and the room's name keeps the person's word.",
+    "toilet": "Give it the use `toilet`, and keep the person's word in the name, for example `room loo \"Loo\" toilet 1.5 x 1.8 ...`. The guide lists `loo` as a word also read as `toilet`, and the name keeps the person's own word.",
+    "inside-outside": "A room's size is inside by default: to the inside faces of its walls, east-west by north-south. To write a size measured to the outside faces, put `outside` after the size on the room line, for example `room living \"Living room\" living 4.0 x 5.0 outside at 0,0`. Grid then measures it to the outside faces; `sizes outside` on its own line makes outside the default for every room after it.",
+    "dividing-line": "No, the dividing line has no thickness. Write `open` at the end of the room line to divide it from the room it is placed against, for example `room kitchen \"Kitchen\" kitchen 3.0 x 4.5 east of living open`. For any other pair, write `wall between <room> and <room> virtual`. Grid draws it dashed as a virtual wall, with thickness 0 in the plan file.",
+    "l-shaped": "It is one room, written with `polygon` and the corners of its inside faces in order round it, in metres. For example: `room living \"Living room\" living polygon 0,0 6,0 6,3 3,3 3,5 0,5`. Do not split it into two rooms to draw the L."
+  }
+}

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 260" width="520" height="260" font-family="Helvetica, Arial, sans-serif" font-size="13" role="img" aria-label="C4: x runs right, to the east; y runs up the drawing, to the north; in metres">
+  <title>C4: the coordinates</title>
+  <rect width="520" height="260" fill="#ffffff"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#222"/></marker></defs>
+  <g stroke="#e3e3e3">
+    <line x1="120" y1="20" x2="120" y2="200"/><line x1="180" y1="20" x2="180" y2="200"/><line x1="240" y1="20" x2="240" y2="200"/><line x1="300" y1="20" x2="300" y2="200"/>
+    <line x1="60" y1="140" x2="340" y2="140"/><line x1="60" y1="80" x2="340" y2="80"/>
+  </g>
+  <line x1="60" y1="200" x2="350" y2="200" stroke="#222" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="60" y1="200" x2="60" y2="15" stroke="#222" stroke-width="1.5" marker-end="url(#a)"/>
+  <circle cx="60" cy="200" r="4" fill="#222"/>
+  <text x="52" y="222" text-anchor="end">(0, 0)</text>
+  <text x="358" y="205">+x, east</text>
+  <text x="68" y="18">+y, north (up the drawing)</text>
+  <circle cx="240" cy="80" r="5" fill="#c0392b"/>
+  <text x="250" y="76" fill="#c0392b">[3, 2]</text>
+  <text x="120" y="218" text-anchor="middle" fill="#555">1</text><text x="180" y="218" text-anchor="middle" fill="#555">2</text><text x="240" y="218" text-anchor="middle" fill="#555">3</text>
+  <text x="44" y="144" text-anchor="end" fill="#555">1</text><text x="44" y="84" text-anchor="end" fill="#555">2</text>
+  <text x="60" y="250" fill="#555">metres; in 3D a point [x, y] at a height h is (x, h, −y), with y up</text>
+</svg>

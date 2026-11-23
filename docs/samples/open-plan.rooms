@@ -1,0 +1,33 @@
+# An open-plan home on one floor: living, dining and kitchen are one space, divided by lines
+# with no thickness so each part is measured; then a bedroom, a bathroom, a utility room, the
+# entrance hall and a stair up to the roof terrace, which is not drawn.
+# The plan file beside this one adds what rooms text has no words for: the site, with its
+# plot, its ground level and its place, the United States, whose model codes are the only
+# figures Grid applies today. Write it again with: grid write open-plan.rooms --plan open-plan.json
+plan "Open-plan home"
+walls outside 0.3 inside 0.1 height 2.7
+windows sill 0.9 height 1.4
+
+room living  "Living"   living   5.0 x 4.5  at 0.15,0.15
+room dining  "Dining"   dining   3.5 x 4.5  east of living open
+room kitchen "Kitchen"  kitchen  *   x 3.0  north of living until dining open
+wall between dining and kitchen virtual
+room bath    "Bathroom" bathroom 2.0 x 2.0  north of kitchen align west
+room hall    "Hall"     corridor 1.2 x 3.6  east of bath
+room utility "Utility"  utility  2.0 x *    north of bath until hall
+room bed     "Bedroom"  bedroom  3.6 x 3.6  east of hall
+room stair   "Stair"    stair    *   x 3.6  east of bed until dining
+
+door front    in hall north, centred, 0.9 wide, opens in, hinged west
+opening o-hall between hall and kitchen, centred, 1.0 wide
+door d-bath   between hall and bath, 0.3 from south, 0.7 wide, opens into bath, hinged south
+door d-util   between hall and utility, 0.3 from north, 0.7 wide, opens into utility, hinged north
+door d-bed    between hall and bed, 0.3 from south, 0.8 wide, opens into bed, hinged south
+opening o-stair between kitchen and stair, centred, 1.0 wide
+door garden   in living south, 1.0 from west, 2.4 wide, sliding
+window w-living in living west, centred, 1.8 wide
+window w-dining in dining south, centred, 2.0 wide, sill 0.6, height 1.7
+window w-dining2 in dining east, centred, 1.6 wide
+window w-kitchen in kitchen west, centred, 1.2 wide, sill 1.0, height 1.1
+window w-bed    in bed north, centred, 1.6 wide
+window w-bath   in bath west, centred, 0.6 wide, sill 1.4, height 0.7

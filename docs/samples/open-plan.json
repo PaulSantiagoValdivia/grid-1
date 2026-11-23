@@ -1,0 +1,419 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {
+      "id": "ext-south",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        8.8,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "open-living-dining",
+      "start": [
+        5.15,
+        0
+      ],
+      "end": [
+        5.15,
+        4.65
+      ],
+      "thickness": 0,
+      "height": 0,
+      "kind": "interior",
+      "virtual": true
+    },
+    {
+      "id": "open-living-kitchen",
+      "start": [
+        0,
+        4.65
+      ],
+      "end": [
+        8.8,
+        4.65
+      ],
+      "thickness": 0,
+      "height": 0,
+      "kind": "interior",
+      "virtual": true
+    },
+    {
+      "id": "ext-west",
+      "start": [
+        0,
+        11.5
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.3,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "ext-east",
+      "start": [
+        8.8,
+        0
+      ],
+      "end": [
+        8.8,
+        11.5
+      ],
+      "thickness": 0.3,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "w-kitchen-north",
+      "start": [
+        0,
+        7.7
+      ],
+      "end": [
+        8.8,
+        7.7
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "w-hall-west",
+      "start": [
+        2.2,
+        7.7
+      ],
+      "end": [
+        2.2,
+        11.5
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "w-utility-bath",
+      "start": [
+        0,
+        9.8
+      ],
+      "end": [
+        2.2,
+        9.8
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "w-hall-bed",
+      "start": [
+        3.5,
+        7.7
+      ],
+      "end": [
+        3.5,
+        11.5
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "ext-north",
+      "start": [
+        8.8,
+        11.5
+      ],
+      "end": [
+        0,
+        11.5
+      ],
+      "thickness": 0.3,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "w-bed-stair",
+      "start": [
+        7.2,
+        7.7
+      ],
+      "end": [
+        7.2,
+        11.5
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "living",
+      "name": "Living",
+      "boundary": [
+        "ext-south",
+        "open-living-dining",
+        "open-living-kitchen",
+        "ext-west"
+      ],
+      "use": "living"
+    },
+    {
+      "id": "dining",
+      "name": "Dining",
+      "boundary": [
+        "ext-south",
+        "ext-east",
+        "open-living-kitchen",
+        "open-living-dining"
+      ],
+      "use": "dining"
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "boundary": [
+        "open-living-kitchen",
+        "ext-east",
+        "w-kitchen-north",
+        "ext-west"
+      ],
+      "use": "kitchen"
+    },
+    {
+      "id": "bath",
+      "name": "Bathroom",
+      "boundary": [
+        "w-kitchen-north",
+        "w-hall-west",
+        "w-utility-bath",
+        "ext-west"
+      ],
+      "use": "bathroom"
+    },
+    {
+      "id": "hall",
+      "name": "Hall",
+      "boundary": [
+        "w-kitchen-north",
+        "w-hall-bed",
+        "ext-north",
+        "w-hall-west"
+      ],
+      "use": "corridor"
+    },
+    {
+      "id": "utility",
+      "name": "Utility",
+      "boundary": [
+        "w-utility-bath",
+        "w-hall-west",
+        "ext-north",
+        "ext-west"
+      ],
+      "use": "utility"
+    },
+    {
+      "id": "bed",
+      "name": "Bedroom",
+      "boundary": [
+        "w-kitchen-north",
+        "w-bed-stair",
+        "ext-north",
+        "w-hall-bed"
+      ],
+      "use": "bedroom"
+    },
+    {
+      "id": "stair",
+      "name": "Stair",
+      "boundary": [
+        "w-kitchen-north",
+        "ext-east",
+        "ext-north",
+        "w-bed-stair"
+      ],
+      "use": "stair"
+    }
+  ],
+  "openings": [
+    {
+      "id": "front",
+      "wall": "ext-north",
+      "type": "door",
+      "offset": 5.5,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "end",
+      "swing": "left"
+    },
+    {
+      "id": "o-hall",
+      "wall": "w-kitchen-north",
+      "type": "opening",
+      "offset": 2.35,
+      "width": 1,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d-bath",
+      "wall": "w-hall-west",
+      "type": "door",
+      "offset": 0.35,
+      "width": 0.7,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "d-util",
+      "wall": "w-hall-west",
+      "type": "door",
+      "offset": 2.65,
+      "width": 0.7,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "end",
+      "swing": "left"
+    },
+    {
+      "id": "d-bed",
+      "wall": "w-hall-bed",
+      "type": "door",
+      "offset": 0.35,
+      "width": 0.8,
+      "sill": 0,
+      "height": 2.1,
+      "hinge": "start",
+      "swing": "right"
+    },
+    {
+      "id": "o-stair",
+      "wall": "w-kitchen-north",
+      "type": "opening",
+      "offset": 7.45,
+      "width": 1,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "garden",
+      "wall": "ext-south",
+      "type": "door",
+      "offset": 1.15,
+      "width": 2.4,
+      "sill": 0,
+      "height": 2.1,
+      "kind": "sliding"
+    },
+    {
+      "id": "w-living",
+      "wall": "ext-west",
+      "type": "window",
+      "offset": 8.2,
+      "width": 1.8,
+      "sill": 0.9,
+      "height": 1.4
+    },
+    {
+      "id": "w-dining",
+      "wall": "ext-south",
+      "type": "window",
+      "offset": 5.9,
+      "width": 2,
+      "sill": 0.6,
+      "height": 1.7
+    },
+    {
+      "id": "w-dining2",
+      "wall": "ext-east",
+      "type": "window",
+      "offset": 1.6,
+      "width": 1.6,
+      "sill": 0.9,
+      "height": 1.4
+    },
+    {
+      "id": "w-kitchen",
+      "wall": "ext-west",
+      "type": "window",
+      "offset": 4.75,
+      "width": 1.2,
+      "sill": 1,
+      "height": 1.1
+    },
+    {
+      "id": "w-bed",
+      "wall": "ext-north",
+      "type": "window",
+      "offset": 2.65,
+      "width": 1.6,
+      "sill": 0.9,
+      "height": 1.4
+    },
+    {
+      "id": "w-bath",
+      "wall": "ext-west",
+      "type": "window",
+      "offset": 2.45,
+      "width": 0.6,
+      "sill": 1.4,
+      "height": 0.7
+    }
+  ],
+  "written": {
+    "from": "rooms",
+    "revision": "c7f49b4ea1c032d4",
+    "boundaries": {
+      "living": "7f42fa08",
+      "dining": "1a562a00",
+      "kitchen": "a5cc3126",
+      "bath": "963db7ff",
+      "hall": "c8fbd20e",
+      "utility": "a0d4b0a8",
+      "bed": "a7e19d44",
+      "stair": "7fedf79e"
+    }
+  },
+  "site": {
+    "country": "US",
+    "ground": -0.15,
+    "boundary": [
+      [
+        -3,
+        -6
+      ],
+      [
+        11.8,
+        -6
+      ],
+      [
+        11.8,
+        15.5
+      ],
+      [
+        -3,
+        15.5
+      ]
+    ],
+    "streets": [
+      1
+    ]
+  }
+}

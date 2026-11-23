@@ -48,7 +48,7 @@ try {
   const listingFile = join(work, 'listing.mjs')
   await build({
     stdin: {
-      contents: "export * from './src/distribution/listing'\nexport { zip } from './src/distribution/zip'\nexport { GRID_TOOLS } from './src/mcp/serveTools'\n",
+      contents: "export * from './src/distribution/listing'\nexport { zip } from './src/distribution/zip'\nexport { GRID_TOOLS } from './src/mcp/serveTools'\nexport { agentGuide } from './src/guide/guide'\n",
       resolveDir: cli,
       loader: 'ts',
     },
@@ -60,7 +60,7 @@ try {
     external: ['@napi-rs/canvas'],
     logLevel: 'warning',
   })
-  /** @type {typeof import('./src/distribution/listing') & typeof import('./src/distribution/zip') & { GRID_TOOLS: import('./src/mcp/toolkit').GridTool[] }} */
+  /** @type {typeof import('./src/distribution/listing') & typeof import('./src/distribution/zip') & { GRID_TOOLS: import('./src/mcp/toolkit').GridTool[], agentGuide: () => string }} */
   const listing = await import(pathToFileURL(listingFile).href)
 
   rmSync(out, { recursive: true, force: true })
@@ -80,11 +80,14 @@ try {
   cpSync(built, join(stage, 'grid.mjs'))
   cpSync(join(cli, 'dist', 'chunks'), join(stage, 'chunks'), { recursive: true })
   cpSync(join(cli, 'dist', 'fonts'), join(stage, 'fonts'), { recursive: true })
+  // CMD-7: the plan's JSON Schema, as the build wrote it, and the guide for agents.
+  cpSync(join(cli, 'dist', 'plan.schema.json'), join(stage, 'plan.schema.json'))
   cpSync(join(repo, 'LICENSE'), join(stage, 'LICENSE'))
   cpSync(join(repo, 'NOTICE'), join(stage, 'NOTICE'))
   writeAll(stage, {
     'package.json': `${JSON.stringify(listing.packageManifest(version), null, 2)}\n`,
     'README.md': listing.packageReadme(),
+    'guide.md': listing.agentGuide(),
   })
   const npm = process.env.npm_execpath && /npm-cli\.[cm]?js$/.test(process.env.npm_execpath)
     ? { command: process.execPath, args: [process.env.npm_execpath] }

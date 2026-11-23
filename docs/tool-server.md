@@ -13,6 +13,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 - [What a change did](#what-a-change-did)
 - [A note set aside as seen](#a-note-set-aside-as-seen)
 - [Reporting a problem](#reporting-a-problem)
+- [The guide and the plan's schema, as resources](#the-guide-and-the-plans-schema-as-resources)
 - [Protocol versions](#protocol-versions)
 
 ## The tools
@@ -554,6 +555,16 @@ with the title, the `agent-drafted` label and, when the link stays under about 8
 filled in (`linkHasBody`). The form is `.github/ISSUE_TEMPLATE/agent-drafted.md`. The agent
 shows the person the draft exactly as returned; the person opens the link and files it, or not.
 An agent never files, posts or sends it.
+
+## The guide and the plan's schema, as resources
+
+Besides the preview page, the server offers two resources an agent reads before its first plan
+(CMD-7): `grid://guide`, the [guide for agents](agent-guide.md) as markdown, and
+`grid://schema/plan`, the plan file's structure as a draft-07 JSON Schema with its format
+version, the same file the build writes beside the command (`plan.schema.json`). Both are made
+from the code when they are read, so they say what this Grid reads. The server's instructions,
+which carry the guide's first paragraphs word for word and point to both resources, are sent on
+`initialize` as well as on `server/discover`.
 
 ## Protocol versions
 

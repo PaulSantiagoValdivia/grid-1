@@ -17,7 +17,20 @@
  * lines. A version Grid does not speak is refused with the ones it does (-32022), and so is a
  * method it does not know: a client of neither era learns what to send.
  */
-import { RETELLING_RULE } from './retelling'
+import {
+  BRIEF_FIRST,
+  FIRST_QUESTIONS,
+  GUIDE_AND_SCHEMA,
+  LABEL_AND_RETELLING,
+  ROOM_NAMES_TRAVEL,
+  ROOMS_FIRST,
+  SOURCE_OF_TRUTH,
+  TOOLS_WORK_ON_PLANS,
+  UNITS_RULE,
+} from '../guide/paragraphs'
+
+// The paragraphs other modules have long taken from here.
+export { ROOM_NAMES_TRAVEL, UNITS_RULE }
 
 export const SERVER_NAME = 'grid'
 /** The longest request line the server reads: 1 MiB. */
@@ -47,39 +60,26 @@ function listOf(items: readonly string[]): string {
 /** The versions Grid speaks, in one sentence, for every refusal a client of another era may get. */
 export const VERSIONS_SPOKEN = `Grid's tool server speaks MCP ${listOf(PER_REQUEST_VERSIONS)}, with the version in each request's _meta and server/discover first, and ${listOf(PROTOCOL_VERSIONS)} after initialize.`
 
-/** What `server/discover` says about the tools, for an agent's host to show. */
-/**
- * What the guide, the server's instructions and the tools that write a plan, an export or a
- * sheet all say (HND-9). The DXF writes each room's name, the IFC its name and id, OBJ and GLB
- * its id, the sheet its name; the plan file holds both.
- */
-export const ROOM_NAMES_TRAVEL =
-  'Room names and ids go into every export (DXF, IFC, OBJ, GLB) and sheet, and travel with the plan file: never put a person\'s name in a room\'s name or id. '
-  + 'Who sits where belongs in the occupancy file beside the plan (plan.occupancy.json), which no export carries.'
-
 /**
  * What the server tells an agent's host before any tool (WRT-1, WRT-2): rooms-first is the main
  * way to write a plan, and the plan file, not the rooms text, is the source of truth. BRF-1: the
- * brief comes first, from the person's words.
+ * brief comes first, from the person's words. CMD-7: the answers to what every agent asks before
+ * its first plan, and where the guide and the plan's JSON Schema are. Every paragraph is written
+ * once, in `guide/paragraphs.ts`, and carried by the skill, the guide and the README too.
+ * CMD-7 (T-app-integrator-4, T-estate-agent-listings-3): sent on `initialize` as well as on
+ * `server/discover`, so the hosts of both eras show it.
  */
-/**
- * WRT-7: the person's units come from their words or their place, asked only when neither says,
- * and are recorded in the plan's `display`, which every drawing, figure and sheet follows. The plan
- * file stays in metres.
- */
-export const UNITS_RULE =
-  'Work in the person\'s units: settle them with the brief, from their words (12 ft, 1,800 sq ft, 4 m) or their place, and ask only when neither says. '
-  + 'Record them with a display line in the rooms text (display ft-in, display m): Grid\'s drawings, figures and sheets follow it, and the plan file stays in metres. A length may carry its unit in one word (360cm, 12ft, 12\'6").'
-
-export const INSTRUCTIONS =
-  'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
-  + 'Before the first room, keep what the person asked for with grid_write_brief, from their own words, each wish given or assumed; every change then says which lines are met and which missed. '
-  + `${UNITS_RULE} `
-  + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
-  + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
-  + `${ROOM_NAMES_TRAVEL} `
-  + 'Every report carries the label General guidance, not your local rules. '
-  + RETELLING_RULE
+export const INSTRUCTIONS = [
+  TOOLS_WORK_ON_PLANS,
+  BRIEF_FIRST,
+  UNITS_RULE,
+  ROOMS_FIRST,
+  SOURCE_OF_TRUTH,
+  FIRST_QUESTIONS,
+  GUIDE_AND_SCHEMA,
+  ROOM_NAMES_TRAVEL,
+  LABEL_AND_RETELLING,
+].join(' ')
 
 type Id = string | number | null
 
@@ -115,14 +115,17 @@ export interface ServerResource {
 
 /** The MCP Apps standard's extension, for a host that shows a tool's answers in a page of its own. */
 const APPS_EXTENSION = 'io.modelcontextprotocol/ui'
+/** The profile an MCP App's page is served with (`text/html;profile=mcp-app`). */
+const APP_PROFILE = 'profile=mcp-app'
 /** MCP's error for a resource it does not have. */
 const RESOURCE_NOT_FOUND = -32002
 
 /** What the server can do: tools, and with a resource handed in, resources and the MCP Apps extension. */
 function capabilitiesOf(resources: readonly ServerResource[]): Record<string, unknown> {
   if (resources.length === 0) return { tools: {} }
-  const mimeTypes = [...new Set(resources.map((resource) => resource.definition.mimeType))]
-  return { tools: {}, resources: {}, extensions: { [APPS_EXTENSION]: { mimeTypes } } }
+  // CMD-7: only an app's page is an MCP App; the guide and the schema are plain resources.
+  const mimeTypes = [...new Set(resources.map((resource) => resource.definition.mimeType).filter((type) => type.includes(APP_PROFILE)))]
+  return { tools: {}, resources: {}, ...(mimeTypes.length > 0 ? { extensions: { [APPS_EXTENSION]: { mimeTypes } } } : {}) }
 }
 
 /** `resources/list` and `resources/read`, the same in both eras. */
@@ -285,6 +288,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = [], reso
         protocolVersion: known ? asked : LATEST_PROTOCOL_VERSION,
         capabilities: capabilitiesOf(resources),
         serverInfo: SERVER_INFO,
+        instructions: INSTRUCTIONS,
       })
     }
     case 'ping':

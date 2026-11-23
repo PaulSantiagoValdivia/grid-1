@@ -43,6 +43,12 @@ section explains. Rooms text, the main way to write a plan, is in
 
 ## What a plan file may hold
 
+Every field each part may hold is in the plan's JSON Schema, which the build writes beside the
+command as `plan.schema.json` and the tool server serves as `grid://schema/plan` (CMD-7). It is
+made from the schema Grid reads plans with, so it validates every plan Grid reads; it allows a
+field Grid does not know, which Grid reads past and names (`plan/unknown-field`). Its five
+conventions, each with a drawing, are in [conventions.md](conventions.md).
+
 The command and the tool server read a plan file one way (`packages/cli/src/fs/textEncoding.ts`
 and `packages/cli/src/command/planText.ts`). The file may be UTF-8, with or without a byte-order
 mark, or UTF-16; anything else is refused with the first byte that is not UTF-8, so a Latin-1

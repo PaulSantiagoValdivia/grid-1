@@ -1,9 +1,9 @@
 # CMD-14: keep the Grid site in step with the repository
 
 Branch `claude/cmd-14-370044`, cut from main at ce236f72. The work is in the site's own repository,
-[ongrid-arch/website](https://github.com/ongrid-arch/website), on its branch `cmd-14-site-in-step`,
+the site's own repository, on its branch `cmd-14-site-in-step`,
 in one pull request for the owner's review:
-[ongrid-arch/website#1](https://github.com/ongrid-arch/website/pull/1). Nothing in Grid changes
+its pull request. Nothing in Grid changes
 but this note: no code, no docs, no changelog fragment (the change people notice is on the site).
 Nothing was merged, deployed or published.
 
@@ -68,7 +68,7 @@ site's `main` and once a day, since Grid's main moves on its own. Results:
   pending; no `packages/floorplan` link; "drawing it right"; the label missing in five parts).
 
 The workflow ran on the PR against Grid's `main` on GitHub and passed
-([run 45079647090](https://github.com/ongrid-arch/website/actions/runs/45079647090)).
+(its CI run).
 
 ## Done when
 
@@ -90,7 +90,7 @@ The workflow ran on the PR against Grid's `main` on GitHub and passed
 
 ## For the owner
 
-- Review and merge [ongrid-arch/website#1](https://github.com/ongrid-arch/website/pull/1), and
+- Review and merge its pull request, and
   publish the site yourself; this card deployed nothing.
 - The title changes from "Floor plans and plan checks for architects" to "Floor plans for AI
   agents", after Grid's README (anyone can use it, not only architects). Revert that line if you

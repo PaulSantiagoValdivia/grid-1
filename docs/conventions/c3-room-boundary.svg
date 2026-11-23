@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 280" width="520" height="280" font-family="Helvetica, Arial, sans-serif" font-size="13" role="img" aria-label="C3: a room lists its walls counter-clockwise, and its area is measured to their inside faces">
+  <title>C3: a room's boundary</title>
+  <rect width="520" height="280" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#c0392b"/></marker>
+    <pattern id="h" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#9db8d6" stroke-width="2"/></pattern>
+  </defs>
+  <path d="M60 30 H340 V250 H60 Z M80 50 V230 H320 V50 Z" fill="#d9d9d9" fill-rule="evenodd" stroke="#222" stroke-width="1.5"/>
+  <rect x="80" y="50" width="240" height="180" fill="url(#h)"/>
+  <line x1="70" y1="240" x2="330" y2="240" stroke="#c0392b" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="330" y1="240" x2="330" y2="40" stroke="#c0392b" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="330" y1="40" x2="70" y2="40" stroke="#c0392b" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="70" y1="40" x2="70" y2="240" stroke="#c0392b" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="200" y="270" text-anchor="middle" fill="#c0392b">1 w-south</text>
+  <text x="350" y="145" fill="#c0392b">2 w-east</text>
+  <text x="200" y="22" text-anchor="middle" fill="#c0392b">3 w-north</text>
+  <text x="8" y="145" fill="#c0392b">4 w-west</text>
+  <text x="200" y="135" text-anchor="middle" font-weight="bold">area: to the inside faces</text>
+  <text x="200" y="155" text-anchor="middle">4.0 × 3.0 = 12 m²</text>
+  <text x="350" y="200" fill="#555">"boundary": ["w-south",</text>
+  <text x="350" y="218" fill="#555">  "w-east", "w-north", "w-west"]</text>
+</svg>

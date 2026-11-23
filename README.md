@@ -10,6 +10,28 @@ One structured plan file (walls, rooms and openings) is the source of truth. It 
 metres and shown in each person's own units: metres, centimetres, millimetres, or feet and
 inches. A geometry core reads it, validates it, draws it in 2D and 3D, and feeds the exporters.
 
+## Quick start
+
+Grid is not on npm yet: build it from a copy of this repository, then write a first plan.
+
+1. `npm ci && npm run build`, then `alias grid="node $PWD/packages/cli/dist/grid.mjs"`.
+2. `grid init my-home && cd my-home` makes a project folder with an empty `plan.json`.
+3. Write the rooms below in `plan.rooms`: each room with its use and inside size, the doors and windows by the rooms they join.
+4. `grid write plan.rooms` works out the walls into `plan.json`, `grid check` checks it, and `grid draw --out plan.svg` draws it.
+5. An agent gets the same as tools with `claude mcp add grid -- node <this folder>/packages/cli/dist/grid.mjs mcp`, and reads [the guide for agents](docs/agent-guide.md) first.
+
+```rooms
+room living  "Living room" living  4.0 x 3.5 at 0,0
+room kitchen "Kitchen"     kitchen 2.5 x 3.5 east of living
+door front in living south, centred, 0.9 wide, opens in
+opening pass between living and kitchen, centred, 0.9 wide
+window w-kitchen in kitchen east, centred, 1.2 wide
+```
+
+Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls.
+
+A room's size is to the inside faces of its walls, unless its line says centre or outside. A stair is a room used as stair on every floor it joins, in the same place (through <top floor> writes it once); a lift is a room used as lift. A room's use is one of Grid's words: an office is office, a toilet or a WC is toilet, and the room's name keeps the person's own word. Where one open space has parts, such as a kitchen open to a living room, the line between them is a dividing line with no thickness: open on the room line, or a virtual wall. An L-shaped room is one room, written with polygon and its inside corners.
+
 ## Status
 
 This repository is being set up. The packages hold working code with tests, but nothing
@@ -89,6 +111,9 @@ Each page answers one kind of question, so read only the one you need.
 
 | To… | Read |
 |---|---|
+| Write a first plan as an agent: rooms first, the raw-wall form, and the answers to what agents ask (a stair, the use words, inside or outside, dividing lines, L-shaped rooms) | [docs/agent-guide.md](docs/agent-guide.md) |
+| Know the plan file's conventions, each with a drawing: wall thickness, where an opening sits, room boundaries, coordinates and floors | [docs/conventions.md](docs/conventions.md) |
+| Start from a realistic plan: a flat, a two-storey house and an open-plan home, as rooms text and as plan files | [docs/samples/](docs/samples/) |
 | Write a plan: name the rooms, doors and windows, and let Grid work out the walls | [docs/rooms-first.md](docs/rooms-first.md) |
 | Run a command: `init`, `write`, `edit`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`, `occupancy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
 | Call Grid as an agent: the `grid_…` tools, asking across the parts by their facts, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
