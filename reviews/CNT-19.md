@@ -85,7 +85,17 @@ seven columns and the ramp stated with `slope: 16.7`.
 
 ## Scoreboard
 
-CHECKS_PLACEHOLDER
+`npm run scoreboard` after merging main at 739066d0: "Same as the stored figures". No count moves:
+turns answered 23, design mistakes named 5, checks the plan can feed 25, rooms Grid does not measure
+735, sound plans with a warning 95. No lab plan states bays or ramps yet, so no lab figure moves.
+
+## Checks run
+
+After merging main at 739066d0: `npm run build` (ok); `timeout 7000 npx vitest run --exclude
+'.claude/**' --maxWorkers=2 --minWorkers=1`: 385 files, 6227 passed, 4 skipped, none failed (1186 s;
+a first run under the brief's 1500 s limit ran out of time at a machine load near 250, and its four
+timing failures, in `grid.e2e`, `nesting`, `diff` and `preview`, passed when run alone);
+`npm run typecheck` (clean); `npm run lint` (clean, before the merge, which touched no source).
 
 ## For the owner
 
