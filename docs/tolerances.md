@@ -139,3 +139,4 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `typicalThicknessHighest` | limit | 1 m | …to this |
 | `typicalDoorLowest` | limit | 0.5 m | The typical door width that agrees with a unit, from this… |
 | `typicalDoorHighest` | limit | 2.5 m | …to this |
+| `traceUnscaled` | limit | 0.01 m | A trace image with no scale of its own is drawn at this many metres a pixel, and said to be unscaled (HND-10) |

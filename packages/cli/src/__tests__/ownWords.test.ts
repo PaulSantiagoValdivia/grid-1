@@ -162,7 +162,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   // SHT-10: five more pieces of the table's own descriptions (sillProjection, and the frame and glass entries).
   // CNT-19: four more, what bayOverlap and rampSlopeDiffers decide.
   // CNT-20: two more, its own tolerance entries.
-  'packages/floorplan/src/geometry/tolerances.ts': [261, 'developer'],
+  // HND-10: one more, the trace image's unscaled drawing scale (traceUnscaled).
+  'packages/floorplan/src/geometry/tolerances.ts': [262, 'developer'],
   'packages/floorplan/src/geometry/itemKinds.ts': [2, 'developer'],
   'packages/floorplan/src/library/builtIn.ts': [1, 'provenance'],
   'packages/floorplan/src/library/index.ts': [4, 'notYet'],
@@ -194,7 +195,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/viewer/src/canvas2d/Canvas2D.tsx': [1, 'notWords'],
   'packages/viewer/src/page/previewPage.ts': [5, 'notYet'],
   'packages/viewer/src/picture/facade.ts': [2, 'developer'],
-  'packages/viewer/src/picture/planSvg.ts': [3, 'developer'],
+  // HND-10: one more, the refusal of a trace image given as anything but a data: address.
+  'packages/viewer/src/picture/planSvg.ts': [4, 'developer'],
   'packages/viewer/src/picture/section.ts': [1, 'developer'],
   'packages/viewer/src/still/index.ts': [2, 'developer'],
 }

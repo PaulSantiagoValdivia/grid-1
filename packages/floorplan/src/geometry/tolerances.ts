@@ -1100,6 +1100,13 @@ export const TOLERANCES = {
     decides: 'For the units question: the widest typical door that agrees with a unit.',
     basis: own
   },
+  traceUnscaled: {
+    kind: 'limit',
+    value: 0.01,
+    unit: 'm',
+    decides: 'A trace image with no scale of its own is drawn at this many metres a pixel, and said to be unscaled (HND-10).',
+    basis: own
+  },
 
   // ── Arithmetic: rounding noise, not adjustable ────────────────────────────────────────────
   noLength: {

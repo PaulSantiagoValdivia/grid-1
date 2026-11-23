@@ -6,7 +6,7 @@
  * `drawPlan` in the `ongrid` package.
  */
 export { planToSvg, planPicture, pictureView, pictureFrame, pictureToSvg, lookOf, fileLookOf, undecidedDoorsOf, fullHeight, DEFAULT_WIDTH } from './planSvg'
-export type { PictureOptions, Picture, PictureFileOptions, PictureShow } from './planSvg'
+export type { PictureOptions, Picture, PictureFileOptions, PictureShow, TracePicture } from './planSvg'
 export type { FaultLine, PictureKey } from './faults'
 export {
   LIGHT_LOOK,

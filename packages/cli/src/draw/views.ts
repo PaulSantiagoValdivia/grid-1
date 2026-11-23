@@ -9,7 +9,7 @@
 import type { Display } from '@ongrid/floorplan/types/units'
 import type { Language } from '@ongrid/floorplan/messages'
 import { poleOfInaccessibility, type Bounds, type CameraRecord, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
-import { LOOKS as PICTURE_LOOKS, comparisonPicture, facadePicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
+import { LOOKS as PICTURE_LOOKS, comparisonPicture, facadePicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow, type TracePicture } from '@ongrid/viewer/src/picture'
 import { resolveFloor, type BuildingComparison, type Facade, type FacadeSide } from '@ongrid/floorplan/geometry'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { sectionPicture } from '@ongrid/viewer/src/picture/section'
@@ -42,7 +42,7 @@ export interface PlanView {
 
 export async function planView(
   plan: FloorPlan,
-  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow; language?: Language; marks?: DrawingMarksAsked },
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow; language?: Language; marks?: DrawingMarksAsked; trace?: TracePicture },
 ): Promise<PlanView> {
   // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
   // MSG-8: the result record's lines, marked on the drawing and listed under it.
@@ -56,6 +56,8 @@ export async function planView(
     ...(options.language ? { language: options.language } : {}),
     // LVL-9: the marks for the plan's other drawings.
     ...(options.marks ? { marks: options.marks } : {}),
+    // HND-10: the trace image under the plan, read from the project folder by the caller.
+    ...(options.trace ? { trace: options.trace } : {}),
   }
   const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })

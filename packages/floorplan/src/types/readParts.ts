@@ -419,6 +419,17 @@ function readTop(work: Record<string, unknown>, faults: ReadFault<Value>[], mark
       faults.push({ kind: 'value-left-out', ...said, used: null })
       continue
     }
+    // HND-10 (C31): a trace image's placement that cannot be read is left out alone: the image
+    // keeps its path and is drawn without it. Its path cannot be done without.
+    const image = work['referenceImage']
+    const [, key] = issue.path
+    if (field === 'referenceImage' && typeof key === 'string' && key !== 'path' && typeof image === 'object' && image !== null && !Array.isArray(image)) {
+      const rest = { ...(image as Record<string, unknown>) }
+      delete rest[key]
+      work['referenceImage'] = rest
+      faults.push({ kind: 'value-left-out', ...said, used: null })
+      continue
+    }
     // `units` keeps its default, metres; `projectId` and `referenceImage` are read as not stated.
     delete work[field]
     const used = FloorPlanSchema.safeParse(work)

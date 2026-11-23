@@ -471,11 +471,13 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     }
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
-    const { file: picture, undecidedDoors, sectionNote } = await drawFile(loaded, request, scale, look)
+    const { file: picture, undecidedDoors, sectionNote, traceNote } = await drawFile(loaded, request, scale, look, project)
     warnLeftOut(io, loaded)
     const undecided = undecidedNote(undecidedDoors)
     if (undecided) io.stderr(undecided)
     if (sectionNote) io.stderr(sectionNote)
+    // HND-10: what became of the plan's trace image.
+    if (traceNote) io.stderr(`${traceNote}\n`)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {

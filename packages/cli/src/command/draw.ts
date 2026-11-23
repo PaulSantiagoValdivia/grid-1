@@ -13,7 +13,7 @@
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
 import { FILE_LOOK_NAMES, LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
-import { FACADE_SIDES, cameraRecord, findView, viewSetting, type FacadeSide } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, cameraRecord, findView, resolveFloor, viewSetting, type FacadeSide } from '@ongrid/floorplan/geometry'
 import { drawFacade, drawPlan } from '../draw/drawPlan'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
@@ -24,6 +24,8 @@ import type { SectionLine } from '@ongrid/floorplan/geometry/section'
 import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
 import { withScheduleMarks } from '../quantities/schedule'
+import type { Project } from '../fs/projectFiles'
+import { readTrace } from '../trace/traceImage'
 
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
@@ -101,6 +103,8 @@ export interface DrawnFile {
   readonly undecidedDoors: readonly string[]
   /** LVL-9: what a section took that the plan does not state, for standard error, when the file is one. */
   readonly sectionNote?: string | null
+  /** HND-10: the line on the plan's trace image, for standard error, when a floor plan is drawn and the plan names one. */
+  readonly traceNote?: string | null
 }
 
 /** The look `grid draw` uses when none is named: a file to hand on. */
@@ -191,7 +195,11 @@ function checkFacadeRequest(request: DrawRequest): void {
   }
 }
 
-export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK): Promise<DrawnFile> {
+/**
+ * The picture `grid draw` writes. HND-10: with the project the plan was read from, a floor plan
+ * draws the plan's trace image under it, read from the project folder (`readTrace`).
+ */
+export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK, project?: Project): Promise<DrawnFile> {
   // MSG-11: the language asked for, else the plan's own, else English, with its messages loaded.
   const asked = askedLanguage(request.lang)
   const language = await languageFor(asked, loaded.plan)
@@ -229,10 +237,13 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
   const faults = inspectPlan(loaded.plan, language === 'en' ? {} : { language, ...(loaded.plan.display?.decimal ? { decimal: loaded.plan.display.decimal } : {}) }).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
+  // HND-10: the trace image under the floor drawn, and its line for standard error.
+  const trace = project === undefined ? null : readTrace(project, loaded.plan, resolveFloor(loaded.plan, floor), language)
+  const traced = trace?.picture ? { trace: trace.picture } : {}
   const file = request.png
-    ? await drawPlan(loaded.plan, { format: 'png', floor, scale, look, faults, ...labels })
-    : await drawPlan(loaded.plan, { format: 'svg', floor, look, faults, ...labels })
-  return { file, undecidedDoors }
+    ? await drawPlan(loaded.plan, { format: 'png', floor, scale, look, faults, ...labels, ...traced })
+    : await drawPlan(loaded.plan, { format: 'svg', floor, look, faults, ...labels, ...traced })
+  return { file, undecidedDoors, traceNote: trace?.line ?? null }
 }
 
 /** The line `grid draw` prints on standard error for doors drawn as undecided, or `null`. */
